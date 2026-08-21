@@ -1,0 +1,120 @@
+# Local development stack.
+#
+# Bring it up in two steps, because the second one needs privileges the API is
+# deliberately never given:
+#
+#   docker compose --profile setup run --rm bootstrap
+#   docker compose up -d
+#
+# The first applies migrations and provisions a least-privileged role as the
+# database owner; the second runs the API as that role. That split is the whole
+# point. Postgres exempts superusers and BYPASSRLS roles from every row-level
+# security policy, so an API connected as the owner would silently lose tenant
+# isolation while every policy still looked correct in \d+. /readyz refuses to
+# report ready when it detects that, which is why the API here connects as
+# fhirbridge_app and never as ${POSTGRES_USER}.
+
+name: fhirbridge
+
+x-postgres-env: &postgres-env
+  POSTGRES_USER: ${POSTGRES_USER:-fhirbridge_owner}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-locally}
+  POSTGRES_DB: ${POSTGRES_DB:-fhirbridge}
+
+services:
+  postgres:
+    image: postgres:16.4-alpine
+    environment: *postgres-env
+    command:
+      # RLS is enforced per-role, so the app role must exist and must not be
+      # the owner. Logging DDL makes provisioning auditable in development.
+      - postgres
+      - -c
+      - log_statement=ddl
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fhirbridge_owner} -d ${POSTGRES_DB:-fhirbridge}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  validator:
+    build:
+      context: .
+      dockerfile: docker/validator/Dockerfile
+      args:
+        IG_PACKAGE: ${IG_PACKAGE:-hl7.fhir.us.core#9.0.0}
+    environment:
+      VALIDATOR_PORT: "8081"
+      FHIR_VERSION: "4.0"
+      IG_PACKAGES: ${IG_PACKAGE:-hl7.fhir.us.core#9.0.0}
+      TX_SERVER: ${TERMINOLOGY_URL:-https://tx.fhir.org/r4}
+      JAVA_OPTS: ${VALIDATOR_JAVA_OPTS:--Xmx3g}
+    # No ports: mapping. The validator has no authentication whatsoever and
+    # will fetch resources it is pointed at, so it stays on the private network.
+    expose:
+      - "8081"
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      validator:
+        condition: service_started
+    environment:
+      FHIRBRIDGE_ENV: development
+      DATABASE_URL: postgresql+asyncpg://${APP_DB_USER:-fhirbridge_app}:${APP_DB_PASSWORD:?set APP_DB_PASSWORD, and use the value the bootstrap step printed}@postgres:5432/${POSTGRES_DB:-fhirbridge}
+      REDIS_URL: redis://redis:6379/0
+      VALIDATOR_URL: http://validator:8081
+      TERMINOLOGY_URL: ${TERMINOLOGY_URL:-https://tx.fhir.org/r4}
+      DEFAULT_IG_PACKAGES: ${IG_PACKAGE:-hl7.fhir.us.core#9.0.0}
+      JSON_LOGS: "true"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PORT: "8000"
+    ports:
+      - "${API_PORT:-8000}:8000"
+    restart: unless-stopped
+
+  # Runs as the database owner, which is exactly why it is not part of the
+  # default stack: `--profile setup` means you invoke it deliberately.
+  bootstrap:
+    profiles: ["setup"]
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-fhirbridge_owner}:${POSTGRES_PASSWORD:-change-me-locally}@postgres:5432/${POSTGRES_DB:-fhirbridge}
+      REDIS_URL: redis://redis:6379/0
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        alembic upgrade head
+        python scripts/bootstrap.py \
+          --tenant-name "${TENANT_NAME:-Local Development}" \
+          --app-role "${APP_DB_USER:-fhirbridge_app}" \
+          --app-password "${APP_DB_PASSWORD:?set APP_DB_PASSWORD to a value you choose}"
+
+volumes:
+  postgres-data:

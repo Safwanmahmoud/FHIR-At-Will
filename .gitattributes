@@ -1,0 +1,16 @@
+# Normalize to LF in the repository. This is not cosmetic: a shell script that
+# reaches a Linux container with CRLF endings fails with a confusing
+# "bad interpreter: no such file or directory", because the \r becomes part of
+# the interpreter path. Contributors on Windows would otherwise break the
+# container images just by checking out.
+* text=auto eol=lf
+
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.Dockerfile text eol=lf
+
+*.png binary
+*.jpg binary
+*.gz binary
+*.tgz binary
+*.jar binary

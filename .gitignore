@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Local configuration. Never commit a real one: it is where credentials land.
+.env
+.env.*
+!.env.example
+
+# Node / reviewer UI (M4)
+node_modules/
+apps/reviewer/dist/
+
+# Terminology and IG content is licensed and operator-supplied (AGENTS.md 8.3).
+# It must never enter the repository, by accident or otherwise.
+.fhir/
+packages/fhir-cache/
+*.tgz
+*.jar
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,29 @@
+# Keep the build context small and, more importantly, free of anything that
+# should not end up in a published layer.
+.git/
+.github/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Local secrets. A leaked .env in an image layer survives every later deletion.
+.env
+.env.*
+
+# Not needed at runtime
+tests/
+docs/
+apps/
+packages/sdk-typescript/node_modules/
+node_modules/
+*.md
+!README.md

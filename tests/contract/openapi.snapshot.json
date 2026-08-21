@@ -1,0 +1,2073 @@
+{
+  "components": {
+    "schemas": {
+      "CapabilitiesResponse": {
+        "additionalProperties": false,
+        "description": "Body of ``GET /v1/capabilities`` \u2014 what this build can actually do.",
+        "properties": {
+          "credential_storage": {
+            "title": "Credential Storage",
+            "type": "string"
+          },
+          "endpoints_implemented": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Endpoints Implemented",
+            "type": "array"
+          },
+          "endpoints_not_implemented": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Endpoints Not Implemented",
+            "type": "array"
+          },
+          "fhir_versions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fhir Versions",
+            "type": "array"
+          },
+          "ig_packages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ig Packages",
+            "type": "array"
+          },
+          "llm_required": {
+            "description": "False for this build: no endpoint here calls an LLM (milestone M1).",
+            "title": "Llm Required",
+            "type": "boolean"
+          },
+          "local_only_mode": {
+            "title": "Local Only Mode",
+            "type": "boolean"
+          },
+          "min_qualification_tier": {
+            "title": "Min Qualification Tier",
+            "type": "string"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          },
+          "validation_layers": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Validation Layers",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "service",
+          "version",
+          "fhir_versions",
+          "ig_packages",
+          "validation_layers",
+          "endpoints_implemented",
+          "endpoints_not_implemented",
+          "llm_required",
+          "local_only_mode",
+          "credential_storage",
+          "min_qualification_tier"
+        ],
+        "title": "CapabilitiesResponse",
+        "type": "object"
+      },
+      "CriticalFlag": {
+        "additionalProperties": false,
+        "description": "A critical-domain concern that always forces review (AGENTS.md 10).",
+        "properties": {
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "expression": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expression"
+          },
+          "fact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fact Id"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "reason"
+        ],
+        "title": "CriticalFlag",
+        "type": "object"
+      },
+      "DependencyHealthResponse": {
+        "additionalProperties": false,
+        "description": "Body of ``GET /v1/health/dependencies``.",
+        "properties": {
+          "dependencies": {
+            "items": {
+              "$ref": "#/components/schemas/DependencyStatus"
+            },
+            "title": "Dependencies",
+            "type": "array"
+          },
+          "status": {
+            "description": "Worst status across dependencies. 'degraded' means the service is reachable but cannot make conformance claims, e.g. a required IG is not loaded.",
+            "enum": [
+              "up",
+              "down",
+              "degraded"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "dependencies"
+        ],
+        "title": "DependencyHealthResponse",
+        "type": "object"
+      },
+      "DependencyStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "up",
+              "down",
+              "degraded"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ],
+        "title": "DependencyStatus",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "IssueSeverity": {
+        "description": "Aligned with FHIR ``issue-severity``.",
+        "enum": [
+          "fatal",
+          "error",
+          "warning",
+          "information"
+        ],
+        "title": "IssueSeverity",
+        "type": "string"
+      },
+      "LayerResult": {
+        "additionalProperties": false,
+        "description": "The outcome of one layer.",
+        "properties": {
+          "blocking": {
+            "description": "Whether errors in this layer block the overall result.",
+            "title": "Blocking",
+            "type": "boolean"
+          },
+          "duration_ms": {
+            "default": 0,
+            "title": "Duration Ms",
+            "type": "integer"
+          },
+          "errors": {
+            "default": 0,
+            "title": "Errors",
+            "type": "integer"
+          },
+          "informational": {
+            "default": 0,
+            "title": "Informational",
+            "type": "integer"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationIssue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "layer": {
+            "$ref": "#/components/schemas/ValidationLayer"
+          },
+          "layer_number": {
+            "title": "Layer Number",
+            "type": "integer"
+          },
+          "notes": {
+            "description": "Coverage caveats, e.g. which bindings could not be checked here.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "skipped_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skipped Reason"
+          },
+          "status": {
+            "$ref": "#/components/schemas/LayerStatus"
+          },
+          "warnings": {
+            "default": 0,
+            "title": "Warnings",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "layer",
+          "layer_number",
+          "status",
+          "blocking"
+        ],
+        "title": "LayerResult",
+        "type": "object"
+      },
+      "LayerStatus": {
+        "enum": [
+          "passed",
+          "failed",
+          "skipped",
+          "not_applicable"
+        ],
+        "title": "LayerStatus",
+        "type": "string"
+      },
+      "ReportVersions": {
+        "additionalProperties": false,
+        "description": "The full version set required by principle 2.8.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "fhir": {
+            "title": "Fhir",
+            "type": "string"
+          },
+          "ig": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ig",
+            "type": "array"
+          },
+          "model": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Per-stage LLM model ids. Empty for validate-only calls.",
+            "title": "Model",
+            "type": "object"
+          },
+          "prompt_set": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Set"
+          },
+          "report_schema": {
+            "title": "Report Schema",
+            "type": "string"
+          },
+          "terminology": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Terminology",
+            "type": "object"
+          },
+          "typed_models": {
+            "description": "FHIR version of the fhir.resources models used for L1 (see docs/adr/0004).",
+            "title": "Typed Models",
+            "type": "string"
+          },
+          "validator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validator"
+          }
+        },
+        "required": [
+          "code",
+          "report_schema",
+          "fhir",
+          "typed_models"
+        ],
+        "title": "ReportVersions",
+        "type": "object"
+      },
+      "RoutingDecision": {
+        "description": "L8 routing outcomes (AGENTS.md 10).",
+        "enum": [
+          "auto",
+          "needs_review",
+          "reject"
+        ],
+        "title": "RoutingDecision",
+        "type": "string"
+      },
+      "TerminologyMapMatch": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display"
+          },
+          "equivalence": {
+            "description": "FHIR concept-map-equivalence / relationship code.",
+            "title": "Equivalence",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The ConceptMap that produced the match.",
+            "title": "Source"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "equivalence"
+        ],
+        "title": "TerminologyMapMatch",
+        "type": "object"
+      },
+      "TerminologyMapRequest": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /v1/terminology/map`` (a ``$translate`` passthrough).",
+        "properties": {
+          "code": {
+            "description": "Source code.",
+            "title": "Code",
+            "type": "string"
+          },
+          "concept_map": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ConceptMap canonical URL to use.",
+            "title": "Concept Map"
+          },
+          "system": {
+            "description": "Source CodeSystem canonical URL.",
+            "title": "System",
+            "type": "string"
+          },
+          "target_system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Target CodeSystem canonical URL.",
+            "title": "Target System"
+          }
+        },
+        "required": [
+          "system",
+          "code"
+        ],
+        "title": "TerminologyMapRequest",
+        "type": "object"
+      },
+      "TerminologyMapResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/TerminologyMapMatch"
+            },
+            "title": "Matches",
+            "type": "array"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "result": {
+            "title": "Result",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "TerminologyMapResponse",
+        "type": "object"
+      },
+      "ValidateCodeRequest": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /v1/terminology/validate-code``.",
+        "properties": {
+          "code": {
+            "description": "The code to validate.",
+            "examples": [
+              "49436004"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Display to check against the server's designations.",
+            "title": "Display"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "CodeSystem canonical URL. Required unless value_set is given.",
+            "examples": [
+              "http://snomed.info/sct"
+            ],
+            "title": "System"
+          },
+          "value_set": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ValueSet canonical URL. When supplied, membership is checked as well as code existence.",
+            "title": "Value Set"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "CodeSystem version.",
+            "title": "Version"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "ValidateCodeRequest",
+        "type": "object"
+      },
+      "ValidateCodeResponse": {
+        "additionalProperties": false,
+        "description": "Result of one ``$validate-code`` call, as answered by the terminology server.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "code_system_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The CodeSystem version the server answered from.",
+            "title": "Code System Version"
+          },
+          "display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The server's preferred display for the code.",
+            "title": "Display"
+          },
+          "issues": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "result": {
+            "description": "True only if the terminology server confirmed the code.",
+            "title": "Result",
+            "type": "boolean"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System"
+          },
+          "value_set": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Set"
+          }
+        },
+        "required": [
+          "result",
+          "code"
+        ],
+        "title": "ValidateCodeResponse",
+        "type": "object"
+      },
+      "ValidateRequest": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /v1/validate``.\n\nA bare FHIR resource (anything with a top-level ``resourceType``) is also\naccepted and is rewritten into this envelope with every option defaulted, so\nan existing FHIR client can post to this endpoint without learning a wrapper\nschema.",
+        "properties": {
+          "layers": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ValidationLayer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Restrict the cascade to these layers. Omit to run every layer that can run. Layers you exclude are reported as skipped, never as passed.",
+            "title": "Layers"
+          },
+          "max_terminology_checks": {
+            "default": 500,
+            "description": "Cap on distinct $validate-code calls for L3. Reaching the cap is reported as a coverage note on the layer, not as a pass.",
+            "maximum": 2000.0,
+            "minimum": 1.0,
+            "title": "Max Terminology Checks",
+            "type": "integer"
+          },
+          "profiles": {
+            "description": "Profile canonical URLs to validate against, in addition to any declared in meta.profile. A profile the validator cannot resolve fails the request rather than passing silently.",
+            "examples": [
+              [
+                "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
+              ]
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Profiles",
+            "type": "array"
+          },
+          "resource": {
+            "additionalProperties": true,
+            "description": "The FHIR R4 resource or Bundle to validate. Sent in the body, never in a query parameter, because it may contain PHI.",
+            "title": "Resource",
+            "type": "object"
+          },
+          "severity_overrides": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/IssueSeverity"
+            },
+            "description": "Per-rule severity overrides for L5 plausibility, keyed by rule id.",
+            "title": "Severity Overrides",
+            "type": "object"
+          }
+        },
+        "required": [
+          "resource"
+        ],
+        "title": "ValidateRequest",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "ValidationIssue": {
+        "additionalProperties": false,
+        "description": "One issue from one layer.",
+        "properties": {
+          "code": {
+            "description": "FHIR issue-type code, or a rule id for L5.",
+            "title": "Code",
+            "type": "string"
+          },
+          "column": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column"
+          },
+          "expression": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "FHIRPath location, e.g. Bundle.entry[4].resource.category.",
+            "title": "Expression"
+          },
+          "layer": {
+            "$ref": "#/components/schemas/ValidationLayer"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "machine_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A fhirbridge error code, when the issue maps to one.",
+            "title": "Machine Code"
+          },
+          "message": {
+            "description": "Human-readable detail. May quote element values.",
+            "title": "Message",
+            "type": "string"
+          },
+          "rule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Identifier of the L5 plausibility rule that fired.",
+            "title": "Rule Id"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/IssueSeverity"
+          }
+        },
+        "required": [
+          "layer",
+          "severity",
+          "code",
+          "message"
+        ],
+        "title": "ValidationIssue",
+        "type": "object"
+      },
+      "ValidationLayer": {
+        "description": "The eight cascade layers, in execution order.",
+        "enum": [
+          "structural",
+          "profile",
+          "terminology",
+          "invariants",
+          "plausibility",
+          "fidelity",
+          "coverage",
+          "routing"
+        ],
+        "title": "ValidationLayer",
+        "type": "string"
+      },
+      "ValidationReport": {
+        "additionalProperties": false,
+        "description": "The response body of ``POST /v1/validate``.",
+        "properties": {
+          "conformant": {
+            "description": "True when no blocking issue was raised by any layer that ran.",
+            "title": "Conformant",
+            "type": "boolean"
+          },
+          "conversion_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversion Id"
+          },
+          "critical_flags": {
+            "items": {
+              "$ref": "#/components/schemas/CriticalFlag"
+            },
+            "title": "Critical Flags",
+            "type": "array"
+          },
+          "duration_ms": {
+            "default": 0,
+            "title": "Duration Ms",
+            "type": "integer"
+          },
+          "layers": {
+            "items": {
+              "$ref": "#/components/schemas/LayerResult"
+            },
+            "title": "Layers",
+            "type": "array"
+          },
+          "nondeterminism_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Nondeterminism Reasons",
+            "type": "array"
+          },
+          "nondeterminism_risk": {
+            "default": false,
+            "title": "Nondeterminism Risk",
+            "type": "boolean"
+          },
+          "omissions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Omissions",
+            "type": "array"
+          },
+          "profiles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Profiles",
+            "type": "array"
+          },
+          "resource_count": {
+            "description": "1, or the number of Bundle entries.",
+            "title": "Resource Count",
+            "type": "integer"
+          },
+          "resource_type": {
+            "title": "Resource Type",
+            "type": "string"
+          },
+          "scores": {
+            "$ref": "#/components/schemas/ValidationScores"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RoutingDecision"
+          },
+          "validated_at": {
+            "format": "date-time",
+            "title": "Validated At",
+            "type": "string"
+          },
+          "versions": {
+            "$ref": "#/components/schemas/ReportVersions"
+          }
+        },
+        "required": [
+          "status",
+          "conformant",
+          "resource_type",
+          "resource_count",
+          "layers",
+          "versions"
+        ],
+        "title": "ValidationReport",
+        "type": "object"
+      },
+      "ValidationScores": {
+        "additionalProperties": false,
+        "description": "Scores. ``None`` means \"not measured\", never \"perfect\".",
+        "properties": {
+          "conformance": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Fraction of submitted resources with zero blocking issues in L1-L4. Defined in docs/evaluation.md.",
+            "title": "Conformance"
+          },
+          "coverage": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "L7 coverage, i.e. 1 - omission_rate.",
+            "title": "Coverage"
+          },
+          "fidelity": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "L6 semantic fidelity. Requires source spans and an LLM.",
+            "title": "Fidelity"
+          },
+          "mean_confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mean calibrated fact confidence. Requires a conversion.",
+            "title": "Mean Confidence"
+          }
+        },
+        "title": "ValidationScores",
+        "type": "object"
+      },
+      "VersionResponse": {
+        "additionalProperties": false,
+        "description": "Body of ``GET /version`` \u2014 the pins required by principle 2.8.",
+        "properties": {
+          "environment": {
+            "title": "Environment",
+            "type": "string"
+          },
+          "fact_schema_version": {
+            "title": "Fact Schema Version",
+            "type": "string"
+          },
+          "fhir_version": {
+            "title": "Fhir Version",
+            "type": "string"
+          },
+          "ig_packages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ig Packages",
+            "type": "array"
+          },
+          "prompt_set_version": {
+            "title": "Prompt Set Version",
+            "type": "string"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          },
+          "typed_model_fhir_version": {
+            "description": "FHIR version of the typed models used for L1 structural validation.",
+            "title": "Typed Model Fhir Version",
+            "type": "string"
+          },
+          "validation_report_schema_version": {
+            "title": "Validation Report Schema Version",
+            "type": "string"
+          },
+          "validator_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validator Version"
+          },
+          "version": {
+            "description": "fhirbridge code version.",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "service",
+          "version",
+          "fhir_version",
+          "typed_model_fhir_version",
+          "prompt_set_version",
+          "fact_schema_version",
+          "validation_report_schema_version",
+          "ig_packages",
+          "environment"
+        ],
+        "title": "VersionResponse",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "description": "A scoped API key (`fhirb_<prefix>_<secret>`) or an OAuth2 client-credentials access token. API keys are for sandbox use; production deployments should use OAuth2 or SMART Backend Services.",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "contact": {
+      "name": "fhirbridge",
+      "url": "https://github.com/fhirbridge/fhirbridge"
+    },
+    "description": "Convert unstructured clinical source material into validated, provenance-tagged\nFHIR R4 resources, with a mandatory human-review stage before anything is\nfinalized.\n\n**What this is not:** not a medical device, not clinical decision support, and not\na FHIR repository. Nothing is inferred beyond what the source text asserts, and no\nendpoint writes to an external FHIR server without an explicit, separate call.\n\n**Fail-closed behaviour.** When the FHIR validator or the terminology server is\nunavailable, requests fail with `503` rather than returning an unverified result.\nAn unvalidated code and an unvalidated bundle are worse than no answer.\n\n**Errors.** Clinical and FHIR-semantic failures return an `OperationOutcome`\nwhose `issue.details.coding` carries a stable machine code from\n`https://fhirbridge.org/CodeSystem/errors`. Platform failures return\n`{\"error\": {\"code\", \"message\", \"trace_id\", \"details\"}}`. Fetch the full code\nlist from `GET /v1/error-codes`.\n\n**No PHI in URLs.** Every endpoint that accepts clinical content accepts it in a\nrequest body. There is no `GET` endpoint taking clinical text as a query\nparameter, and none will be added.",
+    "license": {
+      "identifier": "Apache-2.0",
+      "name": "Apache-2.0"
+    },
+    "summary": "Narrative-to-FHIR conversion with a verification harness.",
+    "title": "fhirbridge",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/fhir/R4/$convert": {
+      "post": {
+        "operationId": "post_fhir_convert",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "description": "This operation runs the extraction pipeline, which ships in milestone M3. Validation endpoints are available now: POST /fhir/R4/$validate and POST /v1/validate."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Convert narrative to a Bundle (available from M3)",
+        "tags": [
+          "fhir-facade"
+        ]
+      }
+    },
+    "/fhir/R4/$extract": {
+      "post": {
+        "operationId": "post_fhir_extract",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "description": "This operation runs the extraction pipeline, which ships in milestone M3. Validation endpoints are available now: POST /fhir/R4/$validate and POST /v1/validate."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Extract facts from narrative (available from M3)",
+        "tags": [
+          "fhir-facade"
+        ]
+      }
+    },
+    "/fhir/R4/$validate": {
+      "post": {
+        "description": "``POST /fhir/R4/$validate``.\n\nAccepts either a bare resource or a ``Parameters`` resource carrying\n``resource`` and optional ``profile`` parameters, which is how FHIR clients\nnormally invoke the operation.",
+        "operationId": "post_fhir_validate",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/fhir+json": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Validator or terminology server unavailable; failing closed."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Validate a resource (runs the same cascade as POST /v1/validate)",
+        "tags": [
+          "fhir-facade"
+        ]
+      }
+    },
+    "/fhir/R4/metadata": {
+      "get": {
+        "description": "Declare what the facade supports.\n\nUnauthenticated, as FHIR clients expect: it advertises capability only and\nexposes no tenant data.",
+        "operationId": "get_fhir_metadata",
+        "responses": {
+          "200": {
+            "content": {
+              "application/fhir+json": {}
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [],
+        "summary": "CapabilityStatement",
+        "tags": [
+          "fhir-facade"
+        ]
+      }
+    },
+    "/v1/capabilities": {
+      "get": {
+        "operationId": "get_capabilities",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilitiesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "What this build can do, and what it cannot",
+        "tags": [
+          "platform"
+        ]
+      }
+    },
+    "/v1/error-codes": {
+      "get": {
+        "description": "Publish the error catalogue as a FHIR ``CodeSystem``.\n\nUnauthenticated on purpose: it contains no tenant data, and a client should\nbe able to fetch the code list before it has credentials.",
+        "operationId": "get_error_codes",
+        "responses": {
+          "200": {
+            "content": {
+              "application/fhir+json": {}
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [],
+        "summary": "The error CodeSystem this API returns",
+        "tags": [
+          "platform"
+        ]
+      }
+    },
+    "/v1/health/dependencies": {
+      "get": {
+        "description": "The detailed view, which ``/readyz`` deliberately is not.\n\nAuthenticated, unlike ``/readyz``: this response names the terminology server\nsoftware and the validator version, which is exactly the fingerprint an\nattacker wants and which no orchestrator needs.",
+        "operationId": "get_health_dependencies",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DependencyHealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Detailed dependency health",
+        "tags": [
+          "platform",
+          "platform"
+        ]
+      }
+    },
+    "/v1/igs": {
+      "get": {
+        "description": "List the configured IGs.\n\nThese are the packages the validator sidecar was *built* with: the sidecar\nloads them from disk at startup and exposes no runtime load endpoint, which\nis what makes a conformance claim reproducible. Use ``GET /readyz`` to\nconfirm they actually resolved.",
+        "operationId": "get_igs",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "title": "Response Implementation Guides V1 Igs Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Implementation guides this deployment validates against",
+        "tags": [
+          "platform"
+        ]
+      }
+    },
+    "/v1/terminology/map": {
+      "post": {
+        "description": "Translate a code using a ConceptMap on the terminology server.\n\nMapping is delegated entirely to the server. This service does not infer\nequivalences, and a translation returned here is still subject to\n``$validate-code`` before it may appear in a resource.",
+        "operationId": "post_terminology_map",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TerminologyMapRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TerminologyMapResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "The terminology server is unavailable. Failing closed: an unanswered question is never reported as 'code not valid'."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Translate a code between systems via $translate",
+        "tags": [
+          "terminology"
+        ]
+      }
+    },
+    "/v1/terminology/validate-code": {
+      "post": {
+        "operationId": "post_terminology_validate_code",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateCodeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "The terminology server is unavailable. Failing closed: an unanswered question is never reported as 'code not valid'."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Confirm a code against the configured terminology server",
+        "tags": [
+          "terminology"
+        ]
+      }
+    },
+    "/v1/translate/cda": {
+      "post": {
+        "operationId": "post_translate_cda",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "description": "Not implemented in v1 by design. The response names the deterministic tool that should be used instead."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Convert C-CDA (not implemented in v1)",
+        "tags": [
+          "translation"
+        ]
+      }
+    },
+    "/v1/translate/hl7v2": {
+      "post": {
+        "operationId": "post_translate_hl7v2",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "description": "Not implemented in v1 by design. The response names the deterministic tool that should be used instead."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Convert HL7 v2 (not implemented in v1)",
+        "tags": [
+          "translation"
+        ]
+      }
+    },
+    "/v1/translate/tabular": {
+      "post": {
+        "operationId": "post_translate_tabular",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "description": "Not implemented in v1 by design. The response names the deterministic tool that should be used instead."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Convert tabular data (not implemented in v1)",
+        "tags": [
+          "translation"
+        ]
+      }
+    },
+    "/v1/validate": {
+      "post": {
+        "operationId": "post_validate",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "examples": {
+                "vital_sign": {
+                  "value": {
+                    "profiles": [
+                      "http://hl7.org/fhir/us/core/StructureDefinition/us-core-vital-signs"
+                    ],
+                    "resource": {
+                      "code": {
+                        "coding": [
+                          {
+                            "code": "8867-4",
+                            "display": "Heart rate",
+                            "system": "http://loinc.org"
+                          }
+                        ]
+                      },
+                      "resourceType": "Observation",
+                      "status": "preliminary",
+                      "subject": {
+                        "reference": "Patient/example"
+                      },
+                      "valueQuantity": {
+                        "code": "/min",
+                        "system": "http://unitsofmeasure.org",
+                        "unit": "beats/minute",
+                        "value": 72
+                      }
+                    }
+                  }
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/ValidateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The payload is not a structurally valid FHIR resource."
+          },
+          "422": {
+            "description": "A requested profile is not loaded in the validator sidecar."
+          },
+          "503": {
+            "description": "The validator or terminology server is unavailable. The request fails closed rather than returning an unverified report."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Validate a FHIR resource or Bundle through the L1-L5 cascade",
+        "tags": [
+          "validation"
+        ]
+      }
+    },
+    "/v1/validate/outcome": {
+      "post": {
+        "description": "The same cascade, rendered as an ``OperationOutcome``.\n\nOffered because FHIR tooling expects a validation call to answer with an\nOperationOutcome. The report shape carries strictly more information, so\nprefer ``POST /v1/validate`` when the client is ours.",
+        "operationId": "post_validate_outcome",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/fhir+json": {}
+            },
+            "description": "An OperationOutcome carrying one issue per finding."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Validate and return a FHIR OperationOutcome instead of a report",
+        "tags": [
+          "validation"
+        ]
+      }
+    },
+    "/version": {
+      "get": {
+        "operationId": "get_version",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [],
+        "summary": "Build and pin versions",
+        "tags": [
+          "platform"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "Score any FHIR resource against profiles, terminology, invariants and plausibility rules. Needs no LLM credentials and retains nothing.",
+      "name": "validation"
+    },
+    {
+      "description": "Confirm and translate codes against the configured terminology server.",
+      "name": "terminology"
+    },
+    {
+      "description": "Structured-format conversion. Deliberately not implemented in v1: deterministic converters are the right tool for HL7 v2 and C-CDA.",
+      "name": "translation"
+    },
+    {
+      "description": "The same engine, exposed as FHIR operations.",
+      "name": "fhir-facade"
+    },
+    {
+      "description": "Health, versions, capabilities.",
+      "name": "platform"
+    }
+  ]
+}
