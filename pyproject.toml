@@ -70,6 +70,13 @@ dev = [
   "testcontainers[postgres]==4.15.0",
   "pip-audit==2.10.1",
 ]
+# Not in `dev`: nothing in CI runs the notebooks, and JupyterLab pulls in a large
+# dependency tree that would slow every contributor's sync for a tool most of them
+# will not open.
+notebook = [
+  "ipykernel==7.3.0",
+  "jupyterlab==4.6.3",
+]
 
 [build-system]
 requires = ["hatchling==1.32.0"]
@@ -111,6 +118,9 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S105", "S106", "S107", "S311", "S608"]
 "scripts/**" = ["T201"]
+# Printing is how a notebook communicates, and its cells share one namespace, so
+# reassigning a name across cells is idiomatic rather than a mistake.
+"notebooks/**" = ["T201", "E402", "F811"]
 "src/fhirbridge/observability/logging.py" = ["T201"]
 
 [tool.ruff.lint.flake8-tidy-imports]
