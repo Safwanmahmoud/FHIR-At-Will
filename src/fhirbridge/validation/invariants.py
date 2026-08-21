@@ -137,9 +137,14 @@ async def validate_invariants(
                 raise
             except ValueError:
                 inconclusive += 1
-                issues.append(
-                    _inconclusive_issue(invariant, location, "the expression could not be parsed")
-                )
+                if not invariant.tolerate_evaluation_failure:
+                    issues.append(
+                        _inconclusive_issue(
+                            invariant,
+                            location,
+                            "the FHIRPath host would not evaluate the expression",
+                        )
+                    )
                 continue
 
             if outcome.is_true:

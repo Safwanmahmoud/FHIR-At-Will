@@ -14,7 +14,7 @@ import pytest
 import respx
 
 from fhirbridge.domain.errors import IgNotLoadedError, ValidatorUnavailableError
-from fhirbridge.fhir.validator_client import ValidatorClient
+from fhirbridge.fhir.validator_client import FhirPathNotEvaluableError, ValidatorClient
 from tests.helpers import OBSERVATION, US_CORE_PATIENT, VALIDATOR_URL, fhir_json, operation_outcome
 
 
@@ -258,6 +258,29 @@ async def test_a_missing_endpoint_says_to_check_the_sidecar_mode(
         await client.validate_resource(OBSERVATION)
 
     assert "'server' mode" in caught.value.detail
+
+
+async def test_a_refused_fhirpath_expression_is_not_treated_as_an_outage(
+    client: ValidatorClient, mock_http: respx.MockRouter
+) -> None:
+    """6.10.2 answers 400 for any expression containing a percent sign, which
+    covers every FHIRPath environment variable. That is a property of the
+    expression, so it must surface as one unevaluable rule rather than taking
+    the whole request down with a 503."""
+    mock_http.post(f"{VALIDATOR_URL}/fhirpath").mock(return_value=httpx.Response(400))
+
+    with pytest.raises(FhirPathNotEvaluableError):
+        await client.evaluate_fhirpath(OBSERVATION, "Bundle.type = %resource.type")
+
+
+async def test_a_bad_request_on_validation_still_fails_closed(
+    client: ValidatorClient, mock_http: respx.MockRouter
+) -> None:
+    """The 400 carve-out is scoped to FHIRPath evaluation, nothing else."""
+    mock_http.post(f"{VALIDATOR_URL}/validateResource").mock(return_value=httpx.Response(400))
+
+    with pytest.raises(ValidatorUnavailableError):
+        await client.validate_resource(OBSERVATION)
 
 
 async def test_a_timeout_fails_closed_and_reports_the_configured_limit(

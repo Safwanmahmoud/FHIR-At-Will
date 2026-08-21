@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 
 from fhirbridge.domain.errors import ValidatorUnavailableError
+from fhirbridge.fhir.validator_client import FhirPathNotEvaluableError
 from fhirbridge.validation.invariants import (
     load_invariants,
     validate_invariants,
@@ -158,6 +159,44 @@ class TestInvariantLayer:
         assert inconclusive.code == "incomplete"
         assert "not reported as passing" in inconclusive.message
         assert any("inconclusive" in note for note in result.notes)
+
+    async def test_a_refused_expression_on_a_tolerant_rule_does_not_fail_the_layer(self) -> None:
+        """The host cannot evaluate %resource, and bdl-3 anticipates exactly that.
+
+        The rule must not pass, must not error, and must still be disclosed as
+        inconclusive: an unevaluable invariant is not evidence of conformance.
+        """
+        pack = load_invariants()
+        target = next(inv for inv in pack.for_resource("Bundle") if inv.id == "bdl-3")
+        assert target.tolerate_evaluation_failure
+        client = FakeValidatorClient(
+            fhirpath_results={target.expression: FhirPathNotEvaluableError("refused")}
+        )
+
+        result = await validate_invariants(
+            {"resourceType": "Bundle", "type": "collection", "entry": []},
+            client=client,
+            resource_type="Bundle",
+        )
+
+        assert result.status is LayerStatus.PASSED
+        assert not any(i.rule_id == target.id for i in result.issues)
+        assert any("inconclusive" in note for note in result.notes)
+
+    async def test_a_refused_expression_on_a_strict_rule_is_reported(self) -> None:
+        pack = load_invariants()
+        target = next(
+            inv for inv in pack.for_resource("Observation") if not inv.tolerate_evaluation_failure
+        )
+        client = FakeValidatorClient(
+            fhirpath_results={target.expression: FhirPathNotEvaluableError("refused")}
+        )
+
+        result = await validate_invariants(OBSERVATION, client=client, resource_type="Observation")
+
+        reported = next(i for i in result.issues if i.rule_id == target.id)
+        assert reported.code == "incomplete"
+        assert "would not evaluate" in reported.message
 
     async def test_an_outage_propagates_rather_than_downgrading_to_inconclusive(self) -> None:
         """A dead sidecar is a 503, not two hundred inconclusive invariants."""

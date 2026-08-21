@@ -57,6 +57,16 @@ _SEVERITY_ORDER: Final[dict[str, int]] = {
 }
 
 
+class FhirPathNotEvaluableError(ValueError):
+    """The FHIRPath host would not evaluate an expression.
+
+    Deliberately a :class:`ValueError` and not a
+    :class:`~fhirbridge.domain.errors.ValidatorUnavailableError`: the sidecar is
+    healthy and answering, so the caller should record the single rule as
+    inconclusive rather than failing the request closed.
+    """
+
+
 @dataclass(frozen=True, slots=True)
 class ValidatorIssue:
     """One issue from the validator, normalized.
@@ -311,6 +321,18 @@ class ValidatorClient:
                 "validator_cli.jar running in 'server' mode at the pinned version.",
                 safe_context={"operation": operation, "status": response.status_code},
             )
+        if operation == "fhirpath" and response.status_code == 400:
+            # A rejected expression describes the expression, not the health of
+            # the sidecar, so this must not fail closed: one unevaluable
+            # invariant would otherwise 503 the whole resource.
+            #
+            # 6.10.2 rejects *any* expression containing a percent sign, even
+            # correctly encoded as %25, which rules out every FHIRPath
+            # environment variable (%resource, %context, %ucum). Those appear in
+            # real FHIR invariants — bdl-3 among them — so this is reached in
+            # normal operation, not just on a typo. L4 reports the rule as
+            # inconclusive, which is the honest answer: not checked, not passed.
+            raise FhirPathNotEvaluableError("The FHIRPath host refused to evaluate the expression.")
         if response.status_code >= 400:
             self._record_failure(operation, f"http_{response.status_code // 100}xx")
             raise ValidatorUnavailableError(
@@ -429,6 +451,7 @@ def _reject_unresolved_profiles(issues: Sequence[ValidatorIssue], profiles: Sequ
 
 __all__ = [
     "DEPENDENCY",
+    "FhirPathNotEvaluableError",
     "FhirPathOutcome",
     "ValidatorClient",
     "ValidatorHealth",

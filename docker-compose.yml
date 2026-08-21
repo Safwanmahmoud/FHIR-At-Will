@@ -56,6 +56,7 @@ services:
       dockerfile: docker/validator/Dockerfile
       args:
         IG_PACKAGE: ${IG_PACKAGE:-hl7.fhir.us.core#9.0.0}
+        VALIDATOR_VERSION: ${VALIDATOR_VERSION:-6.10.2}
     environment:
       VALIDATOR_PORT: "8081"
       FHIR_VERSION: "4.0"
@@ -86,6 +87,10 @@ services:
       VALIDATOR_URL: http://validator:8081
       TERMINOLOGY_URL: ${TERMINOLOGY_URL:-https://tx.fhir.org/r4}
       DEFAULT_IG_PACKAGES: ${IG_PACKAGE:-hl7.fhir.us.core#9.0.0}
+      # Stamped into every report. The sidecar exposes no version endpoint, so
+      # this must be kept in step with the validator build arg above; a report
+      # that cannot name the engine that produced it is not reproducible.
+      VALIDATOR_VERSION: ${VALIDATOR_VERSION:-6.10.2}
       JSON_LOGS: "true"
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       PORT: "8000"

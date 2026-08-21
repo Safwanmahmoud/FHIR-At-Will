@@ -186,6 +186,8 @@ class FakeValidatorClient:
         if self.unavailable:
             raise ValidatorUnavailableError("scripted outage")
         answer = self.fhirpath_results.get(expression, self.default_fhirpath)
+        if isinstance(answer, BaseException):
+            raise answer
         values = tuple(answer) if isinstance(answer, list) else (answer,)
         return FhirPathOutcome(expression=expression, values=values)
 
