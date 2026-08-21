@@ -54,6 +54,67 @@ def build(**overrides: object) -> Settings:
     return load_settings(_env_file=None, **(MINIMUM | overrides))
 
 
+def from_env(monkeypatch: pytest.MonkeyPatch, **overrides: str) -> Settings:
+    """Load settings the way a deployment does: through the process environment.
+
+    Distinct from :func:`build` on purpose. ``build`` passes values as init
+    kwargs, which skips pydantic-settings' env source entirely — and that source
+    is where comma-separated values are decoded. A setting can therefore work in
+    every ``build`` test and still be impossible to set in a container.
+    """
+    for key, value in (MINIMUM | overrides).items():
+        monkeypatch.setenv(key, value)
+    return load_settings(_env_file=None)
+
+
+class TestSettingsThatArriveThroughTheEnvironment:
+    """Guards the env source specifically.
+
+    pydantic-settings JSON-decodes complex fields (lists, dicts) before any
+    validator runs, so a list field reachable from the environment needs
+    ``NoDecode`` or it raises SettingsError on the comma-separated form that
+    .env.example documents.
+    """
+
+    def test_ig_packages_parse_from_a_comma_separated_env_var(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        settings = from_env(
+            monkeypatch, DEFAULT_IG_PACKAGES="hl7.fhir.us.core#9.0.0,hl7.fhir.uv.ips#2.0.0"
+        )
+
+        assert settings.ig_coordinates == ("hl7.fhir.us.core#9.0.0", "hl7.fhir.uv.ips#2.0.0")
+
+    def test_a_single_ig_package_parses_from_the_environment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        settings = from_env(monkeypatch, DEFAULT_IG_PACKAGES="hl7.fhir.us.core#9.0.0")
+
+        assert settings.default_ig_packages == [IgPackage("hl7.fhir.us.core", "9.0.0")]
+
+    def test_the_egress_allowlist_parses_from_a_comma_separated_env_var(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        settings = from_env(monkeypatch, LLM_EGRESS_ALLOWLIST="api.openai.com,localhost")
+
+        assert settings.llm_egress_allowlist == ["api.openai.com", "localhost"]
+
+    def test_the_provider_allowlist_parses_from_a_comma_separated_env_var(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        settings = from_env(monkeypatch, LLM_ALLOWED_PROVIDERS="ollama,openai")
+
+        assert settings.llm_allowed_providers == ["ollama", "openai"]
+
+    def test_a_malformed_ig_package_from_the_environment_is_still_fatal(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        with pytest.raises(ConfigurationError) as caught:
+            from_env(monkeypatch, DEFAULT_IG_PACKAGES="hl7.fhir.us.core")
+
+        assert "name#version" in str(caught.value)
+
+
 # --- The fatal report ------------------------------------------------------
 
 

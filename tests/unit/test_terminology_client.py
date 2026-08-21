@@ -80,6 +80,60 @@ async def test_a_value_set_scoped_check_uses_the_value_set_endpoint(
     assert result.in_value_set is True
 
 
+class TestSystemlessCodesAgainstAValueSet:
+    """A primitive `code` element carries no system, and most bindings in
+    bindings.yaml are exactly that (Patient.gender, Bundle.type, ...).
+
+    $validate-code accepts coding | codeableConcept | code+system |
+    code+inferSystem, so a bare code without inferSystem is a 422 on a
+    conformant server. Because a 4xx is treated as a fail-closed outage, the
+    omission did not degrade L3 quietly — it made every primitive-code binding
+    return 503.
+    """
+
+    async def test_a_systemless_code_asks_the_server_to_infer_the_system(
+        self, client: FhirTerminologyClient, mock_http: respx.MockRouter
+    ) -> None:
+        route = mock_http.post(f"{TERMINOLOGY_URL}/ValueSet/$validate-code").mock(
+            return_value=fhir_json(parameters(result=True))
+        )
+
+        await client.validate_code(
+            system=None,
+            code="female",
+            value_set="http://hl7.org/fhir/ValueSet/administrative-gender",
+        )
+
+        assert params_of(route)["inferSystem"] is True
+        assert "system" not in params_of(route)
+
+    async def test_an_explicit_system_is_not_second_guessed(
+        self, client: FhirTerminologyClient, mock_http: respx.MockRouter
+    ) -> None:
+        route = mock_http.post(f"{TERMINOLOGY_URL}/ValueSet/$validate-code").mock(
+            return_value=fhir_json(parameters(result=True))
+        )
+
+        await client.validate_code(system=LOINC, code="8867-4", value_set="http://example.org/vs")
+
+        assert "inferSystem" not in params_of(route)
+        assert params_of(route)["system"] == LOINC
+
+    async def test_inference_is_not_requested_without_a_value_set(
+        self, client: FhirTerminologyClient, mock_http: respx.MockRouter
+    ) -> None:
+        """There is nothing to infer from: CodeSystem/$validate-code needs the
+        system in the URL parameter, so a systemless call there is simply wrong
+        and should not be papered over."""
+        route = mock_http.post(f"{TERMINOLOGY_URL}/CodeSystem/$validate-code").mock(
+            return_value=fhir_json(parameters(result=True))
+        )
+
+        await client.validate_code(system=None, code="female")
+
+        assert "inferSystem" not in params_of(route)
+
+
 async def test_membership_is_none_when_the_check_was_not_value_set_scoped(
     client: FhirTerminologyClient, mock_http: respx.MockRouter
 ) -> None:

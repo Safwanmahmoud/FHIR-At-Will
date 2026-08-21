@@ -21,13 +21,16 @@ WORKDIR /build
 # every source-only change. README.md comes along because pyproject declares it
 # as the readme, and hatchling refuses to build the project without it.
 COPY pyproject.toml uv.lock README.md ./
-RUN uv sync --frozen --no-install-project --no-dev
+RUN uv sync --frozen --no-install-project --no-dev --no-editable
 
 COPY src ./src
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY scripts ./scripts
-RUN uv sync --frozen --no-dev
+# --no-editable matters: the default editable install writes a .pth pointing at
+# /build/src, which does not exist in the runtime stage, so `import fhirbridge`
+# would fail there while succeeding here.
+RUN uv sync --frozen --no-dev --no-editable
 
 
 FROM python:3.12-slim-bookworm AS runtime
@@ -40,9 +43,11 @@ RUN groupadd --system --gid 10001 fhirbridge \
     && useradd --system --uid 10001 --gid fhirbridge --shell /usr/sbin/nologin \
         --home-dir /app --no-create-home fhirbridge
 
+# The package itself lives in the venv as an installed wheel, so no source tree
+# is copied here. Migrations and the provisioning script are not importable
+# library code, so they do come along.
 COPY --from=builder --chown=root:root /opt/venv /opt/venv
 WORKDIR /app
-COPY --from=builder --chown=root:root /build/src /app/src
 COPY --from=builder --chown=root:root /build/alembic /app/alembic
 COPY --from=builder --chown=root:root /build/alembic.ini /app/alembic.ini
 COPY --from=builder --chown=root:root /build/scripts /app/scripts

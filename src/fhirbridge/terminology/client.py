@@ -183,6 +183,15 @@ class FhirTerminologyClient:
             parameters.append({"name": "display", "valueString": display})
         if value_set:
             parameters.append({"name": "url", "valueUri": value_set})
+            if not system:
+                # $validate-code accepts a code on its own only alongside
+                # inferSystem: the spec's parameter combinations are
+                # coding | codeableConcept | code+system | code+inferSystem.
+                # Omitting it makes a conformant server answer 422, which this
+                # client (rightly) treats as a fail-closed outage — so every
+                # primitive-code binding in bindings.yaml, which by definition
+                # carries no system, would 503 rather than be checked.
+                parameters.append({"name": "inferSystem", "valueBoolean": True})
 
         endpoint = "/ValueSet/$validate-code" if value_set else "/CodeSystem/$validate-code"
         payload = await self._invoke(endpoint, "validate-code", parameters)

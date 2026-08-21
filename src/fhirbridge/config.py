@@ -31,7 +31,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from fhirbridge.util.duration import DurationParseError, parse_duration
 
@@ -158,7 +158,14 @@ def _decode_key(value: SecretStr, field_name: str) -> bytes:
     return raw
 
 
-CsvList = Annotated[list[str], Field(default_factory=list)]
+CsvList = Annotated[list[str], NoDecode, Field(default_factory=list)]
+"""A comma-separated environment variable.
+
+``NoDecode`` is required, not decorative: pydantic-settings JSON-decodes every
+complex field at the source, so without it ``A=x,y`` raises SettingsError before
+:meth:`Settings._split_csv` ever sees the string, and the only settable values
+would be JSON arrays.
+"""
 
 
 class Settings(BaseSettings):
@@ -238,14 +245,14 @@ class Settings(BaseSettings):
     )
 
     default_fhir_version: str = Field(default="4.0.1", validation_alias="DEFAULT_FHIR_VERSION")
-    default_ig_packages: list[IgPackage] = Field(
+    default_ig_packages: Annotated[list[IgPackage], NoDecode] = Field(
         default_factory=lambda: [IgPackage("hl7.fhir.us.core", "9.0.0")],
         validation_alias="DEFAULT_IG_PACKAGES",
     )
 
     # --- BYOK / BYOM (AGENTS.md 7) ---------------------------------------
     llm_mode: LlmMode = Field(default=LlmMode.BYOK, validation_alias="LLM_MODE")
-    llm_allowed_providers: list[str] = Field(
+    llm_allowed_providers: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["*"], validation_alias="LLM_ALLOWED_PROVIDERS"
     )
     llm_egress_allowlist: CsvList = Field(validation_alias="LLM_EGRESS_ALLOWLIST")
@@ -301,6 +308,11 @@ class Settings(BaseSettings):
         ``list[IgPackage]``, so a list of strings fails field validation and the
         after-validator never runs. That made ``DEFAULT_IG_PACKAGES`` unsettable
         from the environment while the default value still worked.
+
+        The field is also annotated ``NoDecode``, without which this validator
+        is never reached either: pydantic-settings JSON-decodes any complex
+        field before validation, so a plain ``a#1.0.0,b#2.0.0`` raised
+        SettingsError at the source rather than arriving here as a string.
         """
         items = (
             [part.strip() for part in value.split(",") if part.strip()]
