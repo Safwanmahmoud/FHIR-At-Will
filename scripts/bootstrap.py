@@ -30,7 +30,7 @@ import secrets
 import sys
 from typing import Final
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from fhirbridge.api.auth import Scope, generate_api_key
@@ -87,6 +87,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "an API key is not, and would hand out a new credential each time."
         ),
     )
+    parser.add_argument(
+        "--only-if-absent",
+        action="store_true",
+        help=(
+            "Do nothing beyond the role if a tenant with this slug already exists. "
+            "This makes the whole script safe to run on every deploy, which is what "
+            "a platform's pre-deploy hook needs: without it, each deploy would mint "
+            "another tenant and another API key."
+        ),
+    )
     args = parser.parse_args(argv)
     if args.role_only and args.skip_role:
         parser.error("--role-only and --skip-role together would do nothing")
@@ -125,9 +135,22 @@ async def provision(args: argparse.Namespace) -> int:
             print(f"Role {args.app_role!r} provisioned and granted.")
             return 0
 
+        slug = args.tenant_slug or slugify(args.tenant_name)
+        factory = create_session_factory(engine)
+
+        if args.only_if_absent:
+            async with privileged_session(factory, reason="bootstrap-probe") as session:
+                existing = await session.scalar(select(Tenant.id).where(Tenant.slug == slug))
+            if existing is not None:
+                print(
+                    f"Tenant {slug!r} already exists ({existing}); leaving it alone. "
+                    "Its API key was shown only when it was created - issue a new key "
+                    "rather than looking for the old one."
+                )
+                return 0
+
         tenant_id = new_id(IdPrefix.TENANT)
         generated = generate_api_key()
-        factory = create_session_factory(engine)
 
         # Privileged because this transaction creates the very tenant that the
         # RLS policies would otherwise scope it to. It is the same escape
@@ -138,7 +161,7 @@ async def provision(args: argparse.Namespace) -> int:
                     id=tenant_id,
                     tenant_id=tenant_id,
                     name=args.tenant_name,
-                    slug=args.tenant_slug or slugify(args.tenant_name),
+                    slug=slug,
                 )
             )
             await session.flush()
