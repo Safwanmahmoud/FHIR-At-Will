@@ -60,7 +60,7 @@ def slugify(name: str) -> str:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--tenant-name", required=True, help="Display name for the tenant.")
+    parser.add_argument("--tenant-name", default=None, help="Display name for the tenant.")
     parser.add_argument("--tenant-slug", default=None, help="Defaults to a slug of the name.")
     parser.add_argument("--key-label", default="bootstrap", help="Label for the API key.")
     parser.add_argument(
@@ -78,7 +78,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Do not create or grant the application role (it already exists).",
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--role-only",
+        action="store_true",
+        help=(
+            "Provision the application role and its grants, then stop. This half is "
+            "idempotent, so it is safe to run on every deploy; minting a tenant and "
+            "an API key is not, and would hand out a new credential each time."
+        ),
+    )
+    args = parser.parse_args(argv)
+    if args.role_only and args.skip_role:
+        parser.error("--role-only and --skip-role together would do nothing")
+    if not args.role_only and not args.tenant_name:
+        parser.error("--tenant-name is required unless --role-only is given")
+    return args
 
 
 def database_url() -> str:
@@ -106,6 +120,10 @@ async def provision(args: argparse.Namespace) -> int:
             async with engine.begin() as connection:
                 for statement in statements:
                     await connection.execute(text(statement))
+
+        if args.role_only:
+            print(f"Role {args.app_role!r} provisioned and granted.")
+            return 0
 
         tenant_id = new_id(IdPrefix.TENANT)
         generated = generate_api_key()
