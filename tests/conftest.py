@@ -28,6 +28,7 @@ from fhirbridge.api.auth import Principal, Scope
 from fhirbridge.api.deps import AppServices, get_principal, get_services
 from fhirbridge.config import Environment, Settings
 from fhirbridge.fhir.validator_client import ValidatorClient
+from fhirbridge.llm.gateway import LlmGateway
 from fhirbridge.storage.models import TENANT_SCOPED_TABLES
 from fhirbridge.terminology.client import FhirTerminologyClient
 from tests.helpers import TERMINOLOGY_URL, VALIDATOR_URL, fhir_json, operation_outcome, parameters
@@ -85,6 +86,7 @@ def services(settings: Settings) -> AppServices:
         validator=ValidatorClient(base_url=VALIDATOR_URL, timeout_s=5.0),
         terminology=FhirTerminologyClient(base_url=TERMINOLOGY_URL, timeout_s=5.0),
         terminology_versions={"snomed": "INT-20260501", "loinc": "2.79"},
+        gateway=LlmGateway(settings=settings),
     )
 
 

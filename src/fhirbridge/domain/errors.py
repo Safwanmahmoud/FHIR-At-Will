@@ -484,6 +484,59 @@ class TerminologyUnavailableError(DependencyUnavailableError):
     code = ErrorCode.TERMINOLOGY_UNAVAILABLE
 
 
+# --- BYOK / LLM errors (AGENTS.md 7); raised from M2 onward ----------------
+# The specs (status, issue-type, category) already live in ERROR_SPECS above;
+# these are the concrete exception types handlers and the gateway raise.
+
+
+class LlmCredentialsRequiredError(DomainError):
+    code = ErrorCode.LLM_CREDENTIALS_REQUIRED
+
+
+class LlmAuthFailedError(DomainError):
+    code = ErrorCode.LLM_AUTH_FAILED
+
+
+class LlmQuotaExhaustedError(DomainError):
+    code = ErrorCode.LLM_QUOTA_EXHAUSTED
+
+
+class LlmRateLimitedError(DomainError):
+    code = ErrorCode.LLM_RATE_LIMITED
+
+
+class LlmContextExceededError(DomainError):
+    code = ErrorCode.LLM_CONTEXT_EXCEEDED
+
+
+class LlmSchemaViolationError(DomainError):
+    code = ErrorCode.LLM_SCHEMA_VIOLATION
+
+
+class LlmContentFilteredError(DomainError):
+    code = ErrorCode.LLM_CONTENT_FILTERED
+
+
+class ModelNotQualifiedError(DomainError):
+    code = ErrorCode.MODEL_NOT_QUALIFIED
+
+
+class BudgetExceededError(DomainError):
+    code = ErrorCode.BUDGET_EXCEEDED
+
+
+class EgressBlockedError(DomainError):
+    code = ErrorCode.EGRESS_BLOCKED
+
+
+class PhiEgressNotAcknowledgedError(DomainError):
+    code = ErrorCode.PHI_EGRESS_NOT_ACKNOWLEDGED
+
+
+class CredentialExpiredError(DomainError):
+    code = ErrorCode.CREDENTIAL_EXPIRED
+
+
 @dataclass(frozen=True, slots=True)
 class ErrorCodeSystemConcept:
     """One concept in the published ``CodeSystem/errors``."""
@@ -556,8 +609,11 @@ def error_code_system() -> dict[str, object]:
 __all__ = [
     "ERROR_CODE_SYSTEM",
     "ERROR_SPECS",
+    "BudgetExceededError",
+    "CredentialExpiredError",
     "DependencyUnavailableError",
     "DomainError",
+    "EgressBlockedError",
     "ErrorCategory",
     "ErrorCode",
     "ErrorSpec",
@@ -568,9 +624,18 @@ __all__ = [
     "InsecureTransportError",
     "InvalidFhirResourceError",
     "InvalidRequestError",
+    "LlmAuthFailedError",
+    "LlmContentFilteredError",
+    "LlmContextExceededError",
+    "LlmCredentialsRequiredError",
+    "LlmQuotaExhaustedError",
+    "LlmRateLimitedError",
+    "LlmSchemaViolationError",
+    "ModelNotQualifiedError",
     "NotFoundError",
     "NotImplementedInV1Error",
     "PayloadTooLargeError",
+    "PhiEgressNotAcknowledgedError",
     "PlatformError",
     "SafeContext",
     "TerminologyUnavailableError",

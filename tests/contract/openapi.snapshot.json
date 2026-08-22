@@ -83,6 +83,91 @@
         "title": "CapabilitiesResponse",
         "type": "object"
       },
+      "ConvertRequest": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /v1/convert``.\n\nThe clinical narrative is sent in the body, never a query parameter, because\nit is PHI (principle 2.6). The generated bundle is validated before it is\nreturned, so the response is a report as much as a conversion.",
+        "properties": {
+          "layers": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ValidationLayer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Restrict the post-generation cascade to these layers. Omit to run every layer that can run. L6 fidelity and L7 coverage require source spans and remain not-applicable until M3.",
+            "title": "Layers"
+          },
+          "max_terminology_checks": {
+            "default": 500,
+            "description": "Cap on distinct $validate-code calls for the L3 layer.",
+            "maximum": 2000.0,
+            "minimum": 1.0,
+            "title": "Max Terminology Checks",
+            "type": "integer"
+          },
+          "profiles": {
+            "description": "US Core (or other) profile canonical URLs to target and validate the generated bundle against.",
+            "examples": [
+              [
+                "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
+              ]
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Profiles",
+            "type": "array"
+          },
+          "text": {
+            "description": "The clinical narrative to convert into FHIR. Sent in the body as PHI.",
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ConvertRequest",
+        "type": "object"
+      },
+      "ConvertResponse": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /v1/convert``.",
+        "properties": {
+          "bundle": {
+            "additionalProperties": true,
+            "description": "The generated FHIR R4 Bundle.",
+            "title": "Bundle",
+            "type": "object"
+          },
+          "conversion_id": {
+            "description": "Opaque id for this conversion; also on the report.",
+            "title": "Conversion Id",
+            "type": "string"
+          },
+          "llm": {
+            "$ref": "#/components/schemas/LlmCallInfo"
+          },
+          "report": {
+            "$ref": "#/components/schemas/ValidationReport",
+            "description": "The L1-L5 validation of the generated bundle. Read status before trusting it."
+          }
+        },
+        "required": [
+          "conversion_id",
+          "bundle",
+          "report",
+          "llm"
+        ],
+        "title": "ConvertResponse",
+        "type": "object"
+      },
       "CriticalFlag": {
         "additionalProperties": false,
         "description": "A critical-domain concern that always forces review (AGENTS.md 10).",
@@ -319,6 +404,117 @@
         ],
         "title": "LayerStatus",
         "type": "string"
+      },
+      "LlmCallInfo": {
+        "additionalProperties": false,
+        "description": "Provenance for one model call. No prompt or completion content (principle 2.6).",
+        "properties": {
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Provider-reported cost of this call, when pricing is known.",
+            "title": "Cost Usd"
+          },
+          "latency_ms": {
+            "default": 0,
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "model": {
+            "description": "The model id the provider reported answering with.",
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "qualification_tier": {
+            "description": "This build's qualification tier for the model.",
+            "title": "Qualification Tier",
+            "type": "string"
+          },
+          "usage": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Token counts reported by the provider, when available.",
+            "title": "Usage",
+            "type": "object"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "qualification_tier"
+        ],
+        "title": "LlmCallInfo",
+        "type": "object"
+      },
+      "LlmProbeResponse": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /v1/llm/probe`` \u2014 a connectivity and credential check.",
+        "properties": {
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "ok": {
+            "description": "True when the provider answered the probe.",
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "qualification_tier": {
+            "title": "Qualification Tier",
+            "type": "string"
+          },
+          "sample": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A short, non-PHI excerpt of the probe completion.",
+            "title": "Sample"
+          }
+        },
+        "required": [
+          "ok",
+          "provider",
+          "model",
+          "qualification_tier",
+          "latency_ms"
+        ],
+        "title": "LlmProbeResponse",
+        "type": "object"
       },
       "ReportVersions": {
         "additionalProperties": false,
@@ -1430,6 +1626,172 @@
         ]
       }
     },
+    "/v1/convert": {
+      "post": {
+        "description": "Generate a FHIR bundle from narrative, then validate it before returning.",
+        "operationId": "post_convert",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-Provider",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Provider"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-Model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Model"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-Base-Url",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Base-Url"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-Extra-Headers",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Extra-Headers"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-PHI-Egress-Acknowledged",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Phi-Egress-Acknowledged"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConvertRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConvertResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "No LLM credentials, or the provider rejected the key."
+          },
+          "422": {
+            "description": "The model output could not be parsed, the model is not qualified, the input exceeds the context window, or the budget would be exceeded."
+          },
+          "429": {
+            "description": "The LLM provider rate-limited the request. Retryable."
+          },
+          "451": {
+            "description": "The target LLM host is blocked by egress policy."
+          },
+          "503": {
+            "description": "The validator or terminology server is unavailable; failing closed."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Convert clinical narrative to a validated FHIR Bundle (BYOK)",
+        "tags": [
+          "conversion"
+        ]
+      }
+    },
     "/v1/error-codes": {
       "get": {
         "description": "Publish the error catalogue as a FHIR ``CodeSystem``.\n\nUnauthenticated on purpose: it contains no tenant data, and a client should\nbe able to fetch the code list before it has credentials.",
@@ -1567,6 +1929,162 @@
         "summary": "Implementation guides this deployment validates against",
         "tags": [
           "platform"
+        ]
+      }
+    },
+    "/v1/llm/probe": {
+      "post": {
+        "description": "Send a trivial, PHI-free prompt to confirm the caller's model is reachable.",
+        "operationId": "post_llm_probe",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-Provider",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Provider"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-Model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Model"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-Base-Url",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Base-Url"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-Extra-Headers",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Extra-Headers"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-PHI-Egress-Acknowledged",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Phi-Egress-Acknowledged"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmProbeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "No LLM credentials, or the provider rejected the key."
+          },
+          "422": {
+            "description": "The model output could not be parsed, the model is not qualified, the input exceeds the context window, or the budget would be exceeded."
+          },
+          "429": {
+            "description": "The LLM provider rate-limited the request. Retryable."
+          },
+          "451": {
+            "description": "The target LLM host is blocked by egress policy."
+          },
+          "503": {
+            "description": "The validator or terminology server is unavailable; failing closed."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Verify BYOK connectivity and credentials without sending PHI",
+        "tags": [
+          "conversion"
         ]
       }
     },
@@ -2052,6 +2570,10 @@
     {
       "description": "Score any FHIR resource against profiles, terminology, invariants and plausibility rules. Needs no LLM credentials and retains nothing.",
       "name": "validation"
+    },
+    {
+      "description": "Convert clinical narrative to FHIR with a bring-your-own-key model, then score the result through the same validation cascade. Requires X-LLM-* credentials and the conversions:write scope.",
+      "name": "conversion"
     },
     {
       "description": "Confirm and translate codes against the configured terminology server.",

@@ -14,8 +14,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Any
 
+from fhirbridge.config import QualificationTier
 from fhirbridge.domain.errors import (
     DomainError,
     ErrorCode,
@@ -27,6 +29,8 @@ from fhirbridge.fhir.validator_client import (
     ValidatorIssue,
     ValidatorOutcome,
 )
+from fhirbridge.llm.gateway import LlmProbeResult, LlmResult
+from fhirbridge.llm.invocation import LlmInvocation
 from fhirbridge.terminology.models import (
     Coding,
     ExpansionResult,
@@ -192,6 +196,53 @@ class FakeValidatorClient:
         return FhirPathOutcome(expression=expression, values=values)
 
 
+@dataclass
+class FakeLlmGateway:
+    """A gateway whose completion is scripted, so the router can be tested offline.
+
+    The point of the router tests is what happens to the model's output — that it
+    is run through the cascade and never trusted blind — not how the bytes were
+    fetched. The gateway's own policy and transport are covered separately.
+    """
+
+    resource: dict[str, Any] = field(default_factory=dict)
+    model: str = "openrouter/openai/gpt-4o-mini"
+    tier: QualificationTier = QualificationTier.SILVER
+    error: BaseException | None = None
+    probe_error: BaseException | None = None
+    complete_calls: list[tuple[str, str]] = field(default_factory=list)
+    probe_calls: list[LlmInvocation] = field(default_factory=list)
+
+    async def complete_json(
+        self,
+        invocation: LlmInvocation,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int = 4096,
+    ) -> LlmResult:
+        del invocation, max_tokens
+        self.complete_calls.append((system_prompt, user_prompt))
+        if self.error is not None:
+            raise self.error
+        return LlmResult(
+            resource=self.resource,
+            model=self.model,
+            usage={"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+            cost_usd=Decimal("0.0001"),
+            latency_ms=5,
+            finish_reason="stop",
+        )
+
+    async def probe(self, invocation: LlmInvocation) -> LlmProbeResult:
+        self.probe_calls.append(invocation)
+        if self.probe_error is not None:
+            raise self.probe_error
+        return LlmProbeResult(
+            model=self.model, tier=self.tier, latency_ms=3, cost_usd=None, sample="ok"
+        )
+
+
 def issue(
     severity: str = "error",
     code: str = "structure",
@@ -202,6 +253,7 @@ def issue(
 
 
 __all__ = [
+    "FakeLlmGateway",
     "FakeTerminologyClient",
     "FakeValidatorClient",
     "ValidateCodeCall",

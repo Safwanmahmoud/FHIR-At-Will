@@ -21,6 +21,16 @@ from fhirbridge.api.auth import Principal, Scope, authenticate_api_key, extract_
 from fhirbridge.config import Settings
 from fhirbridge.domain.errors import UnauthenticatedError
 from fhirbridge.fhir.validator_client import ValidatorClient
+from fhirbridge.llm.gateway import LlmGateway
+from fhirbridge.llm.invocation import (
+    HEADER_API_KEY,
+    HEADER_BASE_URL,
+    HEADER_EXTRA_HEADERS,
+    HEADER_MODEL,
+    HEADER_PHI_ACK,
+    HEADER_PROVIDER,
+    LlmInvocation,
+)
 from fhirbridge.observability import context
 from fhirbridge.storage.session import privileged_session, tenant_session
 from fhirbridge.terminology.interface import TerminologyClient
@@ -39,6 +49,7 @@ class AppServices:
     validator: ValidatorClient
     terminology: TerminologyClient
     terminology_versions: dict[str, str | None]
+    gateway: LlmGateway
 
     def cascade(self) -> ValidationCascade:
         return ValidationCascade(
@@ -85,6 +96,40 @@ def get_cascade(services: Services) -> ValidationCascade:
 
 
 CascadeDep = Annotated[ValidationCascade, Depends(get_cascade)]
+
+
+def get_llm_gateway(services: Services) -> LlmGateway:
+    return services.gateway
+
+
+LlmGatewayDep = Annotated[LlmGateway, Depends(get_llm_gateway)]
+
+
+async def get_llm_invocation(
+    x_llm_provider: Annotated[str | None, Header(alias=HEADER_PROVIDER)] = None,
+    x_llm_model: Annotated[str | None, Header(alias=HEADER_MODEL)] = None,
+    x_llm_api_key: Annotated[str | None, Header(alias=HEADER_API_KEY)] = None,
+    x_llm_base_url: Annotated[str | None, Header(alias=HEADER_BASE_URL)] = None,
+    x_llm_extra_headers: Annotated[str | None, Header(alias=HEADER_EXTRA_HEADERS)] = None,
+    x_phi_egress_ack: Annotated[str | None, Header(alias=HEADER_PHI_ACK)] = None,
+) -> LlmInvocation:
+    """Parse the caller's BYOK credentials out of the ``X-LLM-*`` headers.
+
+    The headers are read here, in one place, so no handler touches raw credential
+    strings; the transport guard (see ``LlmTransportGuardMiddleware``) has already
+    refused them over plaintext HTTP before this runs.
+    """
+    return LlmInvocation.from_headers(
+        provider=x_llm_provider,
+        model=x_llm_model,
+        api_key=x_llm_api_key,
+        base_url=x_llm_base_url,
+        extra_headers=x_llm_extra_headers,
+        phi_ack=x_phi_egress_ack,
+    )
+
+
+LlmInvocationDep = Annotated[LlmInvocation, Depends(get_llm_invocation)]
 
 
 async def get_principal(
@@ -136,12 +181,16 @@ def require_scopes(*scopes: Scope) -> object:
 __all__ = [
     "AppServices",
     "CascadeDep",
+    "LlmGatewayDep",
+    "LlmInvocationDep",
     "PrincipalDep",
     "Services",
     "SessionDep",
     "SettingsDep",
     "TerminologyDep",
     "ValidatorDep",
+    "get_llm_gateway",
+    "get_llm_invocation",
     "get_principal",
     "get_services",
     "get_session",

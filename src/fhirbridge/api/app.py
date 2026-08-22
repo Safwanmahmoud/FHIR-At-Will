@@ -30,9 +30,18 @@ from fhirbridge.api.middleware import (
     LlmTransportGuardMiddleware,
 )
 from fhirbridge.api.openapi import install_openapi
-from fhirbridge.api.routers import fhir_facade, health, meta, terminology, translate, validate
+from fhirbridge.api.routers import (
+    convert,
+    fhir_facade,
+    health,
+    meta,
+    terminology,
+    translate,
+    validate,
+)
 from fhirbridge.config import Settings, get_settings
 from fhirbridge.fhir.validator_client import ValidatorClient
+from fhirbridge.llm.gateway import LlmGateway
 from fhirbridge.observability.logging import configure_logging
 from fhirbridge.observability.metrics import set_build_info
 from fhirbridge.observability.tracing import configure_tracing, instrument_app
@@ -55,6 +64,7 @@ def build_services(settings: Settings) -> AppServices:
         ),
         terminology=FhirTerminologyClient.from_settings(settings),
         terminology_versions={},
+        gateway=LlmGateway(settings=settings),
     )
 
 
@@ -124,6 +134,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(meta.router)
     app.include_router(validate.router)
+    app.include_router(convert.router)
     app.include_router(terminology.router)
     app.include_router(translate.router)
     app.include_router(fhir_facade.router)

@@ -53,6 +53,14 @@ TAGS: Final[list[dict[str, Any]]] = [
         ),
     },
     {
+        "name": "conversion",
+        "description": (
+            "Convert clinical narrative to FHIR with a bring-your-own-key model, then "
+            "score the result through the same validation cascade. Requires X-LLM-* "
+            "credentials and the conversions:write scope."
+        ),
+    },
+    {
         "name": "terminology",
         "description": "Confirm and translate codes against the configured terminology server.",
     },
