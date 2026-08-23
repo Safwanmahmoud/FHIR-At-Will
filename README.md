@@ -24,15 +24,19 @@ The important part is not the model call. It is the harness around it:
 - fail closed when a dependency needed to verify the result is unavailable.
 
 > [!IMPORTANT]
-> The repository currently implements the platform skeleton and validation service
-> (**M0–M1**). Narrative extraction and LLM calls are intentionally not implemented yet.
-> The project follows a simple rule: **you cannot build a trustworthy generator before
-> you can measure one.**
+> The repository currently implements the platform skeleton, the validation cascade
+> and the first LLM endpoints (**M0–M2**): `POST /v1/convert` turns clinical narrative
+> into a FHIR Bundle with the caller's own model and key, then validates the bundle
+> before returning it. The persisted, fact-based extraction pipeline (M3) is
+> intentionally not built yet. The project follows a simple rule: **you cannot build
+> a trustworthy generator before you can measure one.**
 
 ## What works today
 
 `POST /v1/validate` accepts a FHIR resource or Bundle and returns a structured validation
-report. The default deployment targets:
+report. `POST /v1/convert` generates a Bundle from clinical narrative — bring your own
+model and key — and runs it through the same cascade before returning it. The default
+deployment targets:
 
 - FHIR `4.0.1`;
 - US Core `hl7.fhir.us.core#9.0.0`;
@@ -47,6 +51,10 @@ Implemented today:
 - FHIRPath invariant checks;
 - configurable plausibility rules for impossible values, date ordering and dose
   magnitude;
+- BYOK narrative-to-FHIR conversion (`POST /v1/convert`) gated by provider allowlists,
+  egress policy, PHI-egress acknowledgement, model qualification tiers and a
+  per-conversion budget cap;
+- a PHI-free LLM connectivity and credential probe (`POST /v1/llm/probe`);
 - native JSON reports and FHIR `OperationOutcome` responses;
 - a FHIR R4 operation facade at `/fhir/R4`;
 - API-key authentication, tenant-aware PostgreSQL storage and enforced row-level
@@ -56,18 +64,22 @@ Implemented today:
 
 Not implemented yet:
 
-- narrative/document ingestion;
-- LLM provider calls or BYOK/BYOM routing;
-- extraction, assertion, binding, assembly and repair;
-- source-to-output fidelity and coverage scoring;
+- narrative/document ingestion and the persisted, asynchronous `/v1/conversions`
+  resource;
+- fact extraction, assertion, binding, assembly and repair stages;
+- source-to-output fidelity (L6) and coverage (L7) scoring;
 - review queues and delivery workflows; and
-- narrative-to-FHIR conversion through `/v1/conversions` or `/fhir/R4/$convert`.
+- server-held LLM credentials (`LLM_MODE=byok` is the only supported mode).
 
 The capability endpoint reports both sides explicitly:
 
 ```text
 GET /v1/capabilities
 ```
+
+A live demo deployment and its [landing page with an interactive playground](https://fhiratwill.com/playground.html)
+are hosted on Railway — validate resources in the browser, or convert a note with your
+own OpenRouter key.
 
 ## The validation cascade
 
@@ -103,6 +115,9 @@ flowchart LR
     Cascade --> Terminology[L3<br>FHIR terminology server]
     Cascade --> Rules[L5<br>versioned YAML rule pack]
     Cascade --> Routing[L8 routing decision]
+    API -->|/v1/convert, X-LLM-* headers| Gateway[LLM gateway<br>policy gates]
+    Gateway -->|caller's key, never stored| Provider[[LLM provider<br>e.g. OpenRouter]]
+    Gateway -->|generated Bundle| Cascade
     API --> DB[(PostgreSQL<br>tenant RLS)]
     API -. future jobs .-> Redis[(Redis)]
     API --> Obs[JSON logs / Prometheus / OpenTelemetry]
@@ -262,6 +277,59 @@ Request options include:
 
 A bare FHIR resource is also accepted with `Content-Type: application/fhir+json`.
 
+## Convert narrative to FHIR (BYOK)
+
+`POST /v1/convert` turns a clinical note into a FHIR Bundle and immediately validates
+that bundle through the same cascade. The model's output is returned **measured, not
+trusted**: the response pairs the Bundle with its full validation report.
+
+The service holds no LLM credential. The caller supplies provider, model and key on
+each request via headers:
+
+| Header | Purpose |
+|---|---|
+| `X-LLM-Provider` | Provider id; defaults to `openrouter` |
+| `X-LLM-Model` | Model id, e.g. `openai/gpt-4o-mini` (required) |
+| `X-LLM-API-Key` | The caller's provider key (required; wrapped in `SecretStr`, never logged or stored) |
+| `X-LLM-Base-Url` | Optional endpoint override, e.g. a local Ollama |
+| `X-LLM-Extra-Headers` | Optional JSON object of extra provider headers |
+| `X-PHI-Egress-Acknowledged` | Must be `true` to send clinical text to an external host |
+
+```python
+response = httpx.post(
+    f"{base_url}/v1/convert",
+    headers={
+        "Authorization": f"Bearer {api_key}",  # needs the conversions:write scope
+        "X-LLM-Model": "openai/gpt-4o-mini",
+        "X-LLM-API-Key": "sk-or-...",  # your own provider key
+        "X-PHI-Egress-Acknowledged": "true",
+    },
+    json={
+        "text": "62-year-old male, BP 128/82 mmHg, on metformin 500 mg twice daily.",
+        "profiles": ["http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"],
+    },
+    timeout=300,
+)
+result = response.json()
+print(result["report"]["status"])   # read this before trusting result["bundle"]
+print(result["llm"]["cost_usd"], result["llm"]["qualification_tier"])
+```
+
+Every call passes pure, pre-network policy gates — provider allowlist
+(`LLM_ALLOWED_PROVIDERS`), egress host allowlist (`LLM_EGRESS_ALLOWLIST`, empty by
+default so all external calls are blocked), PHI-egress acknowledgement, model
+qualification tier (`MIN_QUALIFICATION_TIER`, default `bronze`) and a worst-case
+budget cap (`MAX_COST_USD_PER_CONVERSION`). A blocked call costs nothing and leaks
+nothing. The model must also support structured JSON output; prose answers come back
+as `422 llm-schema-violation`.
+
+`POST /v1/llm/probe` runs the same gates with a trivial PHI-free prompt, so a client
+can verify credentials, policy and latency before sending clinical text.
+
+This conversion is synchronous and stateless — like `/v1/validate`, it retains
+nothing. The staged, fact-based `/v1/conversions` pipeline with source-span fidelity
+is milestone M3.
+
 ## API surface
 
 ### Public platform endpoints
@@ -284,6 +352,8 @@ A bare FHIR resource is also accepted with `Content-Type: application/fhir+json`
 | `GET` | `/v1/igs` | Preloaded implementation-guide coordinates |
 | `POST` | `/v1/validate` | Native, detailed validation report |
 | `POST` | `/v1/validate/outcome` | Same cascade as a FHIR `OperationOutcome` |
+| `POST` | `/v1/convert` | BYOK narrative-to-Bundle conversion, validated before return |
+| `POST` | `/v1/llm/probe` | PHI-free BYOK connectivity/credential check |
 | `POST` | `/v1/terminology/validate-code` | Code/ValueSet validation |
 | `POST` | `/v1/terminology/map` | ConceptMap `$translate` passthrough |
 | `POST` | `/fhir/R4/$validate` | FHIR-native validation operation |
@@ -318,6 +388,11 @@ If the validator or terminology server is unavailable, validation returns `503`;
 not skip the check and produce a report that looks verified. Similarly, an unknown
 profile returns `422 ig-not-loaded` rather than a false clean result.
 
+LLM calls fail with their own catalogue codes: missing credentials (`400`), a rejected
+provider key (`400`), an unqualified model, over-budget estimate or unparseable
+completion (`422`), provider rate-limiting (`429`, retryable) and a blocked egress host
+(`451`). The full machine-readable list is served at `GET /v1/error-codes`.
+
 ## Configuration
 
 Common development configuration is documented in [`.env.example`](.env.example). The
@@ -333,7 +408,13 @@ settings operators most often need are:
 | `VALIDATOR_VERSION` | Validator version stamped into reports | `6.10.2` |
 | `REQUIRE_RLS_ENFORCEMENT` | Refuse readiness if RLS does not apply | `true` |
 | `FHIRBRIDGE_ENV` | `development`, `staging`, or `production` | `development` |
-| `ALLOW_INSECURE_TRANSPORT` | Allow future `X-LLM-*` credentials over HTTP | `false` |
+| `ALLOW_INSECURE_TRANSPORT` | Allow `X-LLM-*` credentials over HTTP | `false` |
+| `LLM_EGRESS_ALLOWLIST` | Hosts caller-supplied LLM endpoints may reach | _empty (blocks all)_ |
+| `LLM_ALLOWED_PROVIDERS` | Provider allowlist matched against `X-LLM-Provider` | `*` |
+| `LOCAL_ONLY_MODE` | Permit only loopback LLM endpoints | `false` |
+| `REQUIRE_PHI_EGRESS_ACK` | Require the PHI-egress header for external LLM hosts | `true` |
+| `MIN_QUALIFICATION_TIER` | Minimum model tier: `unqualified`/`bronze`/`silver`/`gold` | `bronze` |
+| `MAX_COST_USD_PER_CONVERSION` | Worst-case cost cap per conversion | `1.00` |
 | `JSON_LOGS` | Structured logging | `true` |
 
 `tx.fhir.org` is useful for development but has no SLA. The service sends terminology
@@ -349,17 +430,20 @@ start when:
 - `TERMINOLOGY_URL` still points at the public `tx.fhir.org` service; or
 - a non-loopback `VALIDATOR_URL` uses plaintext HTTP.
 
-These checks apply even though the LLM pipeline is not implemented yet, so a deployment
-cannot enter production with unsafe BYOK defaults waiting to be activated later.
+These checks gate the live BYOK pipeline, so a deployment cannot enter production with
+unsafe LLM defaults.
 
 ## Security and privacy model
 
 The codebase is designed to make unsafe states visible:
 
 - API keys are stored as Argon2id hashes and presented as Bearer credentials;
+- LLM calls are BYOK: provider keys arrive in `X-LLM-*` headers, are wrapped in
+  `SecretStr` on read, and are never stored, logged or returned;
 - tenant-scoped tables use PostgreSQL row-level security;
 - readiness verifies that the connected role is actually subject to RLS;
-- submitted `/v1/validate` resources are scored and dropped rather than persisted;
+- submitted `/v1/validate` resources and `/v1/convert` narratives are scored and dropped
+  rather than persisted;
 - validation responses use `Cache-Control: no-store`;
 - terminology calls use POST bodies, keeping codes out of URLs and common access logs;
 - structured logs record decisions and counts, not validator messages that may quote
@@ -370,7 +454,7 @@ The codebase is designed to make unsafe states visible:
 Self-hosting is not, by itself, HIPAA/GDPR compliance. Operators remain responsible for
 transport security, access control, backups, retention, terminology licensing, business
 associate/data processing agreements, incident response and the infrastructure on which
-the service runs. Do not send real PHI to a third-party terminology or future LLM provider
+the service runs. Do not send real PHI to a third-party terminology or LLM provider
 without the required legal and technical controls.
 
 ## Notebook smoke test
@@ -424,6 +508,7 @@ hand. `tests/contract/test_requirements_export.py` detects drift from `uv.lock`.
 | `src/fhirbridge/api/` | FastAPI app, middleware, auth, schemas and routers |
 | `src/fhirbridge/validation/` | Cascade orchestration and report models |
 | `src/fhirbridge/validation/rules/` | Versioned L4 invariant and L5 plausibility YAML |
+| `src/fhirbridge/llm/` | BYOK gateway, policy gates, qualification tiers and pinned prompts |
 | `src/fhirbridge/fhir/` | Typed models, OperationOutcome and validator client |
 | `src/fhirbridge/terminology/` | Terminology server client and result models |
 | `src/fhirbridge/storage/` | SQLAlchemy models, tenant sessions, RLS checks and provisioning |
@@ -442,8 +527,8 @@ hand. `tests/contract/test_requirements_export.py` detects drift from `uv.lock`.
 |---|---|---|
 | M0 | Config, storage, auth, errors, OpenAPI, health, containers | Implemented |
 | M1 | Validation cascade, validator sidecar, terminology and plausibility | Implemented |
-| M2 | BYOK/BYOM provider gateway and qualification probes | Planned |
-| M3 | Narrative ingestion, facts, generation, fidelity and coverage | Planned |
+| M2 | BYOK/BYOM provider gateway, synchronous `/v1/convert` and probes | Implemented |
+| M3 | Narrative ingestion, facts, staged generation, fidelity and coverage | Planned |
 | M4 | Human review workflow | Planned |
 | M5 | Model qualification and calibrated routing | Planned |
 | M6 | Delivery integrations and operational hardening | Planned |

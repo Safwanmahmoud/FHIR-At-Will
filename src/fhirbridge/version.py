@@ -16,7 +16,7 @@ CODE_VERSION: Final[str] = __version__
 """Version of this service's code, stamped into every validation report."""
 
 PROMPT_SET_VERSION: Final[str] = "v1.0.0"
-"""Version of the hash-pinned prompt template set (unused until M2)."""
+"""Version of the hash-pinned prompt template set, stamped into conversion reports."""
 
 FACT_SCHEMA_VERSION: Final[str] = "v1"
 """Version of the canonical `Fact` schema (AGENTS.md 9.2), unused until M3."""
