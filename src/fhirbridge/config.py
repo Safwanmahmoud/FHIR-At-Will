@@ -278,6 +278,16 @@ class Settings(BaseSettings):
     max_repair_iterations: int = Field(
         default=2, ge=0, le=10, validation_alias="MAX_REPAIR_ITERATIONS"
     )
+    max_agent_iterations: int = Field(
+        default=24,
+        ge=1,
+        le=100,
+        validation_alias="MAX_AGENT_ITERATIONS",
+        description=(
+            "Hard cap on tool-calling turns for POST /v1/craft. The loop also stops "
+            "early on finish or when the per-conversion cost cap is reached."
+        ),
+    )
     max_upload_bytes: int = Field(
         default=25 * 1024 * 1024, ge=1024, validation_alias="MAX_UPLOAD_BYTES"
     )

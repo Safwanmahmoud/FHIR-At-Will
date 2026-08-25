@@ -15,8 +15,16 @@ from fhirbridge import __version__
 CODE_VERSION: Final[str] = __version__
 """Version of this service's code, stamped into every validation report."""
 
-PROMPT_SET_VERSION: Final[str] = "v1.0.0"
+PROMPT_SET_VERSION: Final[str] = "v2.0.0"
 """Version of the hash-pinned prompt template set, stamped into conversion reports."""
+
+AGENT_TOOLSET_VERSION: Final[str] = "v1.0.0"
+"""Version of the craft agent's deterministic tool set (``POST /v1/craft``).
+
+Like the prompt set, the tools are a pinned artifact: a verdict produced by the
+agent names the toolset that produced it, so a change to a tool's behaviour must
+move this version.
+"""
 
 FACT_SCHEMA_VERSION: Final[str] = "v1"
 """Version of the canonical `Fact` schema (AGENTS.md 9.2), unused until M3."""
@@ -37,6 +45,7 @@ See docs/adr/0004 and OPEN_QUESTIONS.md#Q1.
 """
 
 __all__ = [
+    "AGENT_TOOLSET_VERSION",
     "CODE_VERSION",
     "FACT_SCHEMA_VERSION",
     "PROMPT_SET_VERSION",

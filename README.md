@@ -31,19 +31,16 @@ The hosted playground supports:
 
 1. **Validate a resource** — submit a FHIR R4 resource or Bundle to the live
    eight-layer cascade.
-2. **Narrative → FHIR** — bring an OpenRouter key, choose a model, generate a Bundle,
-   validate it, and optionally feed blocking validation issues back to the model for
-   up to two repair attempts.
+2. **Narrative → FHIR** — bring an OpenRouter key, choose a tool-calling model, and let
+   the agentic `POST /v1/craft` endpoint build a Bundle through validated tool edits,
+   then run the assembled Bundle through the cascade.
 
-The repair loop belongs to the
-[landing-page proxy](https://github.com/Safwanmahmoud/FHIR-at-Will-Landing), not this
-API. `POST /v1/convert` currently performs one model call followed by one validation
-pass. API clients that want repair orchestration must implement it themselves or use
-the playground. Playground repair calls OpenRouter directly with a landing-specific
-prompt, then send each candidate Bundle back through `/v1/validate`. Those repair model
-calls do not pass through this API's provider allowlist, qualification, or budget gates.
-See the [landing repository](https://github.com/Safwanmahmoud/FHIR-at-Will-Landing)
-for its proxy configuration and security model.
+The playground is a thin [landing-page proxy](https://github.com/Safwanmahmoud/FHIR-at-Will-Landing):
+it forwards the visitor's BYOK headers to `/v1/craft` and renders the response,
+including the agent's tool-call trace. Correction now happens inside the API — the
+agent re-validates every edit and self-corrects — so there is no separate landing-side
+repair loop, and every model call passes through this API's provider allowlist,
+qualification, and budget gates.
 
 ## What works today
 
@@ -53,7 +50,8 @@ for its proxy configuration and security model.
 | Profile and invariant validation with the HL7 validator | Implemented |
 | Terminology validation and ConceptMap translation | Implemented |
 | Clinical plausibility rules | Implemented |
-| BYOK narrative-to-FHIR conversion | Implemented, synchronous and single-pass |
+| BYOK narrative-to-FHIR conversion (`/v1/convert`, single-pass) | Implemented |
+| BYOK agentic narrative-to-FHIR (`/v1/craft`, tool-driven) | Implemented |
 | PHI-free LLM credential/connectivity probe | Implemented |
 | FHIR `OperationOutcome` and `$validate` facade | Implemented |
 | API-key authentication and tenant-aware PostgreSQL RLS | Implemented |
@@ -122,8 +120,11 @@ flowchart LR
     Gateway -->|caller's key| Provider[LLM provider]
     Gateway --> Cascade
 
-    Playground -. optional repair prompts .-> Provider
-    Playground -. revalidate repaired Bundle .-> API
+    API --> Agent[Craft agent loop]
+    Agent -->|tool calls| Gateway
+    Agent --> Tools[Deterministic tools<br>structural + terminology gated]
+    Tools --> Terminology
+    Agent -->|assembled Bundle| Cascade
 
     API --> DB[(PostgreSQL<br>tenant RLS)]
     API --> Observability[Logs / metrics / traces]
@@ -174,6 +175,18 @@ tenant, and prints an API key. The key is shown once; only its Argon2id hash is 
 The bootstrap key receives `documents:write`, `conversions:write`, `facts:read`, and
 `reviews:write`; it deliberately excludes PHI-read, submission, credential-management,
 and administrator scopes.
+
+If that plaintext key is lost, issue a replacement for the existing tenant instead of
+running bootstrap again:
+
+```bash
+DATABASE_URL=postgresql+asyncpg://owner:...@host/db \
+  uv run python scripts/issue_api_key.py --tenant-slug local-development
+```
+
+The replacement is unscoped by default, which is sufficient for validation and the API
+smoke test. Repeat `--scope <scope>` to grant additional permissions. The command must
+use the schema-owner connection, prints the new key once, and does not revoke old keys.
 
 ### 3. Start the stack
 
@@ -356,6 +369,64 @@ capabilities vary by provider.
 Use `POST /v1/llm/probe` with the same headers to verify credentials, policy, and
 connectivity using a PHI-free prompt before sending clinical content.
 
+## Craft narrative to FHIR (agentic)
+
+`POST /v1/craft` is the recommended narrative path. Instead of asking the model for a
+whole Bundle in one shot, it gives the model a set of deterministic tools and lets it
+build the record step by step. Each tool validates its own edit before committing:
+
+- **Structural gate** — every candidate resource must parse through the L1 typed model.
+- **Terminology gate** — every clinical `Coding` the model introduces (LOINC, SNOMED CT,
+  RxNorm, UCUM) must be confirmed by `$validate-code`. An unverifiable code fails closed.
+
+A rejected edit is returned to the model with the reason so it can retry; the draft can
+never enter a non-conformant state. When the agent finishes, the assembled Bundle is run
+through the same L1–L5 cascade as every other path. The model chooses *what* to assert;
+the tools guarantee *validity*.
+
+It uses the same BYOK `X-LLM-*` headers and `conversions:write` scope as `/v1/convert`,
+but **the model must support tool calling** (on OpenRouter, `supported_parameters`
+includes `tools`). The response adds:
+
+- `bundle` — the assembled FHIR R4 Bundle;
+- `report` — the full validation result;
+- `trace` — the ordered tool calls, each marked accepted or rejected;
+- `iterations` and `stop_reason` — how the loop ended (`finished`, `max_iterations`,
+  `budget_exhausted`, or `no_tool_calls`);
+- `toolset_version` and `llm` — provenance across every model call the agent made.
+
+The loop is bounded by `MAX_AGENT_ITERATIONS` (default `24`) and the same
+`MAX_COST_USD_PER_CONVERSION` budget as single-pass conversion.
+
+```python
+response = httpx.post(
+    f"{base_url}/v1/craft",
+    headers={
+        "Authorization": f"Bearer {api_key}",
+        "X-LLM-Provider": "openrouter",
+        "X-LLM-Model": "meta-llama/llama-3.3-70b-instruct",  # must support tools
+        "X-LLM-API-Key": "sk-or-...",  # your key; never commit it
+        "X-PHI-Egress-Acknowledged": "true",
+    },
+    json={
+        "text": (
+            "62-year-old male seen for follow-up. "
+            "Blood pressure 128/82 mmHg. Takes metformin 500 mg twice daily."
+        )
+    },
+    timeout=300,
+)
+response.raise_for_status()
+
+result = response.json()
+print(result["report"]["status"], result["report"]["conformant"])
+print(result["iterations"], result["stop_reason"])
+for step in result["trace"]:
+    print(step.get("tool"), "ok" if step.get("ok") else step.get("error"))
+```
+
+`/v1/convert` remains available as the single-shot path for models without tool calling.
+
 ## API surface
 
 ### Public
@@ -381,12 +452,13 @@ connectivity using a PHI-free prompt before sending clinical content.
 | `POST` | `/v1/validate` | Structured validation report |
 | `POST` | `/v1/validate/outcome` | Validation as `OperationOutcome` |
 | `POST` | `/v1/convert` | Single-pass BYOK narrative conversion and validation |
+| `POST` | `/v1/craft` | Agentic BYOK narrative conversion via validated tools |
 | `POST` | `/v1/llm/probe` | PHI-free provider probe |
 | `POST` | `/v1/terminology/validate-code` | Code and ValueSet validation |
 | `POST` | `/v1/terminology/map` | ConceptMap `$translate` |
 | `POST` | `/fhir/R4/$validate` | FHIR-native validation operation |
 
-`/v1/convert` and `/v1/llm/probe` require the `conversions:write` scope.
+`/v1/convert`, `/v1/craft`, and `/v1/llm/probe` require the `conversions:write` scope.
 
 HL7 v2, C-CDA, and tabular conversion stubs return `501`, as do the FHIR facade
 operations `/fhir/R4/$convert` and `/fhir/R4/$extract`. Deterministic source formats
@@ -431,6 +503,7 @@ See [`.env.example`](.env.example) for the complete development configuration.
 | `REQUIRE_PHI_EGRESS_ACK` | Require explicit external PHI acknowledgement | `true` |
 | `MIN_QUALIFICATION_TIER` | Minimum model tier | `bronze` |
 | `MAX_COST_USD_PER_CONVERSION` | Worst-case model cost cap | `1.00` USD |
+| `MAX_AGENT_ITERATIONS` | Tool-calling turn cap for `/v1/craft` | `24` |
 
 The public `tx.fhir.org` service has no SLA. It receives codes rather than complete
 resources, but those codes may still be sensitive in context. Production deployments
@@ -484,9 +557,10 @@ uv sync --group notebook
 uv run jupyter lab notebooks/api_smoke_test.ipynb
 ```
 
-Set `FHIRBRIDGE_BASE` and `FHIRBRIDGE_API_KEY` before running it. The current notebook
-covers the M0/M1 platform and validation surface, not the M2 conversion endpoints. Use
-synthetic resources because notebook outputs are persisted in the file.
+Set `FHIRBRIDGE_BASE`, `FHIRBRIDGE_API_KEY`, and `OPENROUTER_API_KEY` before running it.
+The notebook checks only the two primary workflows: validation and BYOK agentic
+narrative-to-FHIR crafting (`/v1/craft`). Use synthetic resources because notebook
+outputs are persisted in the file.
 
 ## Repository layout
 
@@ -494,6 +568,7 @@ synthetic resources because notebook outputs are persisted in the file.
 |---|---|
 | `src/fhirbridge/api/` | FastAPI app, auth, schemas, middleware, and routers |
 | `src/fhirbridge/validation/` | Cascade orchestration, reports, and rule packs |
+| `src/fhirbridge/agent/` | Craft agent: draft state, deterministic tools, and loop |
 | `src/fhirbridge/llm/` | BYOK gateway, policy gates, qualification, and prompts |
 | `src/fhirbridge/fhir/` | Typed models, `OperationOutcome`, and validator client |
 | `src/fhirbridge/terminology/` | Terminology client and result models |
@@ -510,7 +585,7 @@ synthetic resources because notebook outputs are persisted in the file.
 |---|---|---|
 | M0 | Platform, auth, storage, health, containers | Implemented |
 | M1 | Validation cascade, terminology, plausibility | Implemented |
-| M2 | BYOK gateway, synchronous conversion, probe | Implemented |
+| M2 | BYOK gateway, synchronous + agentic conversion, probe | Implemented |
 | M3 | Documents, facts, staged generation, fidelity, coverage, repair | Planned |
 | M4 | Human review workflow | Planned |
 | M5 | Goldset-based model qualification and calibrated routing | Planned |

@@ -104,6 +104,56 @@ class ConvertRequest(BaseModel):
     )
 
 
+class CraftRequest(BaseModel):
+    """Body of ``POST /v1/craft``.
+
+    Same shape as :class:`ConvertRequest`: a clinical narrative (PHI, in the body)
+    and optional profile targets plus post-assembly cascade controls. The
+    difference is entirely server-side — the narrative is turned into FHIR by a
+    tool-driven agent whose every edit is validated before it is kept.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(
+        min_length=1,
+        description="The clinical narrative to convert into FHIR. Sent in the body as PHI.",
+    )
+    profiles: list[str] = Field(
+        default_factory=list,
+        description="Profile canonical URLs to target and validate the assembled bundle against.",
+        examples=[["http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"]],
+    )
+    layers: list[ValidationLayer] | None = Field(
+        default=None,
+        description=(
+            "Restrict the post-assembly cascade to these layers. Omit to run every "
+            "layer that can run."
+        ),
+    )
+    max_terminology_checks: Annotated[int, Field(ge=1, le=2000)] = Field(
+        default=500,
+        description="Cap on distinct $validate-code calls for the L3 layer.",
+    )
+
+
+class CraftToolCall(BaseModel):
+    """One step in the agent's trace: which tool ran and whether it committed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    iteration: int
+    tool: str | None = None
+    ok: bool | None = None
+    finish: bool | None = None
+    error: str | None = Field(
+        default=None, description="Why a tool refused the edit, when it did. May quote values."
+    )
+    event: str | None = Field(
+        default=None, description="A loop event with no tool, e.g. 'budget_exhausted'."
+    )
+
+
 class LlmCallInfo(BaseModel):
     """Provenance for one model call. No prompt or completion content (principle 2.6)."""
 
@@ -132,6 +182,33 @@ class ConvertResponse(BaseModel):
         description="The L1-L5 validation of the generated bundle. Read status before trusting it."
     )
     llm: LlmCallInfo
+
+
+class CraftResponse(BaseModel):
+    """Body of ``POST /v1/craft``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    conversion_id: str = Field(description="Opaque id for this conversion; also on the report.")
+    bundle: FhirResource = Field(
+        description="The FHIR R4 Bundle the agent assembled through validated tool edits."
+    )
+    report: ValidationReport = Field(
+        description="The L1-L5 validation of the assembled bundle. Read status before trusting it."
+    )
+    llm: LlmCallInfo = Field(
+        description="Aggregate provenance across every model call the agent made."
+    )
+    trace: list[CraftToolCall] = Field(
+        default_factory=list,
+        description="Ordered record of each tool the agent ran and whether it was accepted.",
+    )
+    iterations: int = Field(description="Tool-calling turns the agent took.")
+    stop_reason: str = Field(
+        description="Why the loop ended: finished, max_iterations, budget_exhausted, or "
+        "no_tool_calls."
+    )
+    toolset_version: str = Field(description="Version of the deterministic tool set that ran.")
 
 
 class LlmProbeResponse(BaseModel):
@@ -303,6 +380,9 @@ __all__ = [
     "CapabilitiesResponse",
     "ConvertRequest",
     "ConvertResponse",
+    "CraftRequest",
+    "CraftResponse",
+    "CraftToolCall",
     "DependencyHealthResponse",
     "DependencyStatus",
     "LiveResponse",

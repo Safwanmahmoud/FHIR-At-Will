@@ -10,12 +10,13 @@ from __future__ import annotations
 
 from fhirbridge.llm.prompts import (
     NARRATIVE_TO_BUNDLE,
+    NARRATIVE_TO_DRAFT_AGENT,
     PROMPT_SET,
     PROMPT_SET_VERSION,
     prompt_set_fingerprint,
 )
 
-PINNED_FINGERPRINT = "8d4abc509c2009dcc6af1f5432d44bafea551eb0bbe06fb03ef743957e7eb1e7"
+PINNED_FINGERPRINT = "d4a2c15f47ce0b1c21abfabfc32178bb6cce280d5b0dbecc234f81c8f9027959"
 
 
 def test_the_prompt_set_has_not_drifted_from_its_pinned_hash() -> None:
@@ -32,6 +33,7 @@ def test_the_fingerprint_is_deterministic() -> None:
 def test_the_version_is_stamped_and_the_set_is_populated() -> None:
     assert PROMPT_SET_VERSION
     assert NARRATIVE_TO_BUNDLE.id in PROMPT_SET
+    assert NARRATIVE_TO_DRAFT_AGENT.id in PROMPT_SET
 
 
 def test_the_user_template_renders_narrative_and_profiles() -> None:

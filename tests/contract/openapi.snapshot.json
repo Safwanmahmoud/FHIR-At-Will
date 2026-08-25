@@ -168,6 +168,190 @@
         "title": "ConvertResponse",
         "type": "object"
       },
+      "CraftRequest": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /v1/craft``.\n\nSame shape as :class:`ConvertRequest`: a clinical narrative (PHI, in the body)\nand optional profile targets plus post-assembly cascade controls. The\ndifference is entirely server-side \u2014 the narrative is turned into FHIR by a\ntool-driven agent whose every edit is validated before it is kept.",
+        "properties": {
+          "layers": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ValidationLayer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Restrict the post-assembly cascade to these layers. Omit to run every layer that can run.",
+            "title": "Layers"
+          },
+          "max_terminology_checks": {
+            "default": 500,
+            "description": "Cap on distinct $validate-code calls for the L3 layer.",
+            "maximum": 2000.0,
+            "minimum": 1.0,
+            "title": "Max Terminology Checks",
+            "type": "integer"
+          },
+          "profiles": {
+            "description": "Profile canonical URLs to target and validate the assembled bundle against.",
+            "examples": [
+              [
+                "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
+              ]
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Profiles",
+            "type": "array"
+          },
+          "text": {
+            "description": "The clinical narrative to convert into FHIR. Sent in the body as PHI.",
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "CraftRequest",
+        "type": "object"
+      },
+      "CraftResponse": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /v1/craft``.",
+        "properties": {
+          "bundle": {
+            "additionalProperties": true,
+            "description": "The FHIR R4 Bundle the agent assembled through validated tool edits.",
+            "title": "Bundle",
+            "type": "object"
+          },
+          "conversion_id": {
+            "description": "Opaque id for this conversion; also on the report.",
+            "title": "Conversion Id",
+            "type": "string"
+          },
+          "iterations": {
+            "description": "Tool-calling turns the agent took.",
+            "title": "Iterations",
+            "type": "integer"
+          },
+          "llm": {
+            "$ref": "#/components/schemas/LlmCallInfo",
+            "description": "Aggregate provenance across every model call the agent made."
+          },
+          "report": {
+            "$ref": "#/components/schemas/ValidationReport",
+            "description": "The L1-L5 validation of the assembled bundle. Read status before trusting it."
+          },
+          "stop_reason": {
+            "description": "Why the loop ended: finished, max_iterations, budget_exhausted, or no_tool_calls.",
+            "title": "Stop Reason",
+            "type": "string"
+          },
+          "toolset_version": {
+            "description": "Version of the deterministic tool set that ran.",
+            "title": "Toolset Version",
+            "type": "string"
+          },
+          "trace": {
+            "description": "Ordered record of each tool the agent ran and whether it was accepted.",
+            "items": {
+              "$ref": "#/components/schemas/CraftToolCall"
+            },
+            "title": "Trace",
+            "type": "array"
+          }
+        },
+        "required": [
+          "conversion_id",
+          "bundle",
+          "report",
+          "llm",
+          "iterations",
+          "stop_reason",
+          "toolset_version"
+        ],
+        "title": "CraftResponse",
+        "type": "object"
+      },
+      "CraftToolCall": {
+        "additionalProperties": false,
+        "description": "One step in the agent's trace: which tool ran and whether it committed.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why a tool refused the edit, when it did. May quote values.",
+            "title": "Error"
+          },
+          "event": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A loop event with no tool, e.g. 'budget_exhausted'.",
+            "title": "Event"
+          },
+          "finish": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finish"
+          },
+          "iteration": {
+            "title": "Iteration",
+            "type": "integer"
+          },
+          "ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ok"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          }
+        },
+        "required": [
+          "iteration"
+        ],
+        "title": "CraftToolCall",
+        "type": "object"
+      },
       "CriticalFlag": {
         "additionalProperties": false,
         "description": "A critical-domain concern that always forces review (AGENTS.md 10).",
@@ -1787,6 +1971,172 @@
           }
         ],
         "summary": "Convert clinical narrative to a validated FHIR Bundle (BYOK)",
+        "tags": [
+          "conversion"
+        ]
+      }
+    },
+    "/v1/craft": {
+      "post": {
+        "description": "Drive a model through deterministic tools to assemble a validated bundle.",
+        "operationId": "post_craft",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-Provider",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Provider"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-Model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Model"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-Base-Url",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Base-Url"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-Extra-Headers",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Extra-Headers"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-PHI-Egress-Acknowledged",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Phi-Egress-Acknowledged"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CraftResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "No LLM credentials, or the provider rejected the key."
+          },
+          "422": {
+            "description": "The model is not qualified, does not support tool calling, the input exceeds the context window, or the budget would be exceeded."
+          },
+          "429": {
+            "description": "The LLM provider rate-limited the request. Retryable."
+          },
+          "451": {
+            "description": "The target LLM host is blocked by egress policy."
+          },
+          "503": {
+            "description": "The validator or terminology server is unavailable; failing closed."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Build a validated FHIR Bundle from narrative with a tool-driven agent (BYOK)",
         "tags": [
           "conversion"
         ]
