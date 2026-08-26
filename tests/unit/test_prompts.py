@@ -16,7 +16,7 @@ from fhirbridge.llm.prompts import (
     prompt_set_fingerprint,
 )
 
-PINNED_FINGERPRINT = "d4a2c15f47ce0b1c21abfabfc32178bb6cce280d5b0dbecc234f81c8f9027959"
+PINNED_FINGERPRINT = "c365956e7d113ed93217b1b2d4a8d99fcc9fc896481421d113089dee2134d35c"
 
 
 def test_the_prompt_set_has_not_drifted_from_its_pinned_hash() -> None:

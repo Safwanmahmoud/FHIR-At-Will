@@ -15,7 +15,7 @@ from fhirbridge import __version__
 CODE_VERSION: Final[str] = __version__
 """Version of this service's code, stamped into every validation report."""
 
-PROMPT_SET_VERSION: Final[str] = "v2.0.0"
+PROMPT_SET_VERSION: Final[str] = "v2.1.0"
 """Version of the hash-pinned prompt template set, stamped into conversion reports."""
 
 AGENT_TOOLSET_VERSION: Final[str] = "v1.0.0"

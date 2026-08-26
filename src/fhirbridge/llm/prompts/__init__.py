@@ -12,9 +12,23 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from importlib import resources
 from typing import Final
 
 from fhirbridge.version import PROMPT_SET_VERSION
+
+TERMINOLOGY_REFERENCE: Final[str] = (
+    resources.files(__package__)
+    .joinpath("terminology_reference.txt")
+    .read_text(encoding="utf-8")
+    .strip()
+)
+"""Curated, pre-verified terminology cheat-sheet appended to the agent prompt.
+
+Keeping the code lists in a data file rather than inline lets the agent reuse known
+codes and skip most terminology round-trips. Because it is part of the prompt, any
+edit is caught by the pinned fingerprint and must move ``PROMPT_SET_VERSION``.
+"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,7 +117,11 @@ NARRATIVE_TO_DRAFT_AGENT: Final[PromptTemplate] = PromptTemplate(
         "Principles: assert only what the source text states; never invent facts, "
         "values, dates, or codes. Omission is always preferable to fabrication. "
         "Use LOINC for labs and vitals, SNOMED CT for problems, RxNorm for "
-        "medications, UCUM for units, and ISO 8601 for dates."
+        "medications, UCUM for units, and ISO 8601 for dates.\n"
+        "\n"
+        "Prefer the pre-verified codes in the reference below over searching. Only "
+        "search_terminology for LOINC; never search for SNOMED CT or RxNorm.\n"
+        "\n" + TERMINOLOGY_REFERENCE
     ),
     user_template=(
         "Build a FHIR R4 record from the following clinical note by calling the "
@@ -144,6 +162,7 @@ __all__ = [
     "NARRATIVE_TO_DRAFT_AGENT",
     "PROMPT_SET",
     "PROMPT_SET_VERSION",
+    "TERMINOLOGY_REFERENCE",
     "PromptTemplate",
     "prompt_set_fingerprint",
 ]

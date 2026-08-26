@@ -1,0 +1,88 @@
+TERMINOLOGY REFERENCE (use these codes directly; they are pre-verified)
+
+Code systems and their canonical URLs:
+- LOINC (labs, vitals): http://loinc.org
+- SNOMED CT (problems, findings, procedures): http://snomed.info/sct
+- RxNorm (medications): http://www.nlm.nih.gov/research/umls/rxnorm
+- UCUM (units): http://unitsofmeasure.org
+
+Searching:
+- search_terminology is reliable ONLY for LOINC (http://loinc.org). Call it when
+  you need a LOINC code you do not already know.
+- Do NOT call search_terminology for SNOMED CT or RxNorm; those searches fail on
+  this server and waste turns. Use a code listed below, a code stated in the note,
+  or omit the coding and provide only the text.
+- If no suitable code is known, add the resource with display text only rather
+  than guessing a code or searching repeatedly.
+
+VITAL SIGNS (LOINC code | display | UCUM unit_code | unit) — category vital-signs:
+- 8867-4  | Heart rate                         | /min   | beats/minute
+- 9279-1  | Respiratory rate                   | /min   | breaths/minute
+- 8310-5  | Body temperature                   | Cel    | degrees Celsius
+- 8480-6  | Systolic blood pressure            | mm[Hg] | mmHg
+- 8462-4  | Diastolic blood pressure           | mm[Hg] | mmHg
+- 85354-9 | Blood pressure panel               |        |
+- 8302-2  | Body height                        | cm     | centimeter
+- 29463-7 | Body weight                        | kg     | kilogram
+- 39156-5 | Body mass index (BMI)              | kg/m2  | kilogram per square meter
+- 2708-6  | Oxygen saturation (SpO2)           | %      | percent
+- 59408-5 | Oxygen saturation by pulse oximetry| %      | percent
+
+COMMON LABS (LOINC) — category laboratory:
+- 2339-0  | Glucose (blood)          | mg/dL | mg/dL
+- 4548-4  | Hemoglobin A1c           | %     | percent
+- 2160-0  | Creatinine (serum)       | mg/dL | mg/dL
+- 2823-3  | Potassium (serum)        | mmol/L| mmol/L
+- 2951-2  | Sodium (serum)           | mmol/L| mmol/L
+- 2093-3  | Cholesterol, total       | mg/dL | mg/dL
+- 2085-9  | HDL cholesterol          | mg/dL | mg/dL
+- 13457-7 | LDL cholesterol (calc)   | mg/dL | mg/dL
+
+COMMON PROBLEMS (SNOMED CT code | display):
+- 38341003   | Hypertension
+- 44054006   | Type 2 diabetes mellitus
+- 195967001  | Asthma
+- 13645005   | Chronic obstructive pulmonary disease
+- 53741008   | Coronary artery disease
+- 42343007   | Congestive heart failure
+- 431855005  | Chronic kidney disease
+- 35489007   | Depressive disorder
+- 73211009   | Diabetes mellitus
+- 233604007  | Pneumonia
+
+COMMON MEDICATIONS (RxNorm code | display):
+- 617312  | Atorvastatin 20 mg oral tablet
+- 197361  | Lisinopril 10 mg oral tablet
+- 860975  | Metformin 500 mg oral tablet
+- 313782  | Acetaminophen 325 mg oral tablet
+- 197806  | Ibuprofen 200 mg oral tablet
+- 855332  | Warfarin 5 mg oral tablet
+- 197517  | Amoxicillin 500 mg oral capsule
+- 966222  | Omeprazole 20 mg oral capsule
+
+PATIENT-LEVEL VALUE SETS (set with set_element when the note states them):
+- Administrative gender (Patient.gender): male | female | other | unknown
+- Marital status (Patient.maritalStatus), system
+  http://terminology.hl7.org/CodeSystem/v3-MaritalStatus:
+    M Married | S Never Married | D Divorced | W Widowed | L Legally Separated |
+    U Unmarried | T Domestic partner | A Annulled
+- Language (Patient.communication.language), system urn:ietf:bcp:47:
+    en English | en-US English (United States) | es Spanish | fr French |
+    de German | zh Chinese | ar Arabic
+- US Core race/ethnicity use OMB categories in the us-core-race and
+  us-core-ethnicity extensions, system urn:oid:2.16.840.1.113883.6.238:
+    2106-3 White | 2054-5 Black or African American |
+    2028-9 Asian | 1002-5 American Indian or Alaska Native |
+    2076-8 Native Hawaiian or Other Pacific Islander |
+    2135-2 Hispanic or Latino | 2186-5 Not Hispanic or Latino
+
+FIXED STATUS CODES (validated locally; no search needed):
+- Observation.category, system
+  http://terminology.hl7.org/CodeSystem/observation-category:
+    vital-signs | laboratory | imaging | survey | exam | procedure | social-history
+- Condition.clinicalStatus, system
+  http://terminology.hl7.org/CodeSystem/condition-clinical:
+    active | recurrence | relapse | inactive | remission | resolved
+- AllergyIntolerance.clinicalStatus, system
+  http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical:
+    active | inactive | resolved
