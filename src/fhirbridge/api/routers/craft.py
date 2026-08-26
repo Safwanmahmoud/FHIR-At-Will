@@ -15,12 +15,16 @@ money across several model calls, bounded by ``MAX_AGENT_ITERATIONS`` and
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
+from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import APIRouter, Response
+from fastapi.responses import StreamingResponse
 
-from fhirbridge.agent.loop import CraftAgent
+from fhirbridge.agent.loop import CraftAgent, CraftResult
 from fhirbridge.api.auth import Scope
 from fhirbridge.api.deps import (
     CascadeDep,
@@ -31,7 +35,9 @@ from fhirbridge.api.deps import (
     TerminologyDep,
 )
 from fhirbridge.api.schemas import CraftRequest, CraftResponse, CraftToolCall, LlmCallInfo
+from fhirbridge.domain.errors import FhirbridgeError
 from fhirbridge.domain.ids import IdPrefix, new_id
+from fhirbridge.llm.invocation import LlmInvocation
 from fhirbridge.llm.qualification import resolve_tier
 from fhirbridge.version import AGENT_TOOLSET_VERSION
 
@@ -86,22 +92,132 @@ async def craft(
         conversion_id=conversion_id,
     )
 
-    logger.info(
-        "craft_request_completed",
-        extra={
-            # Counts and decisions only; the narrative and bundle are PHI and never
-            # reach a log (principle 2.6).
-            "conversion_id": conversion_id,
-            "resource_type": result.report.resource_type,
-            "decision": str(result.report.status),
-            "actor_id": principal.actor_id,
-            "model": result.model,
-            "iterations": result.iterations,
-            "stop_reason": result.stop_reason,
+    _log_result(result, conversion_id=conversion_id, actor_id=principal.actor_id)
+
+    response.headers["Cache-Control"] = "no-store"
+    return _craft_response(result, invocation=invocation, conversion_id=conversion_id)
+
+
+@router.post(
+    "/craft/stream",
+    summary="Stream a tool-driven narrative-to-FHIR conversion as NDJSON (BYOK)",
+    response_class=StreamingResponse,
+    responses={
+        **_LLM_ERROR_RESPONSES,
+        200: {
+            "description": (
+                "Newline-delimited JSON events. Draft events contain the live Bundle; "
+                "the final complete event contains the normal CraftResponse fields."
+            ),
+            "content": {"application/x-ndjson": {}},
+        },
+    },
+)
+async def craft_stream(
+    body: CraftRequest,
+    principal: PrincipalDep,
+    invocation: LlmInvocationDep,
+    gateway: LlmGatewayDep,
+    terminology: TerminologyDep,
+    cascade: CascadeDep,
+    settings: SettingsDep,
+) -> StreamingResponse:
+    """Stream tool activity and immutable snapshots of the evolving FHIR draft."""
+    principal.require(Scope.CONVERSIONS_WRITE)
+    gateway.authorize(invocation, sending_phi=True)
+    conversion_id = new_id(IdPrefix.CONVERSION)
+    actor_id = principal.actor_id
+
+    async def events() -> AsyncIterator[bytes]:
+        queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+        async def emit(event: dict[str, Any]) -> None:
+            await queue.put(event)
+
+        async def produce() -> None:
+            try:
+                agent = CraftAgent(gateway=gateway, settings=settings)
+                result = await agent.run(
+                    invocation,
+                    terminology=terminology,
+                    cascade=cascade,
+                    narrative=body.text,
+                    profiles=tuple(body.profiles),
+                    layers=frozenset(body.layers) if body.layers is not None else None,
+                    max_terminology_checks=body.max_terminology_checks,
+                    ig_packages=settings.ig_coordinates,
+                    conversion_id=conversion_id,
+                    on_event=emit,
+                    authorize=False,
+                )
+                _log_result(result, conversion_id=conversion_id, actor_id=actor_id)
+                payload = _craft_response(
+                    result, invocation=invocation, conversion_id=conversion_id
+                ).model_dump(mode="json")
+                await emit({"type": "complete", **payload})
+            except asyncio.CancelledError:
+                raise
+            except FhirbridgeError as exc:
+                logger.warning(
+                    "craft_stream_failed",
+                    extra={
+                        "conversion_id": conversion_id,
+                        "error_code": str(exc.code),
+                        "http_status": exc.http_status,
+                    },
+                )
+                await emit(
+                    {
+                        "type": "error",
+                        "code": str(exc.code),
+                        "status": exc.http_status,
+                        "message": exc.spec.title,
+                    }
+                )
+            except Exception:
+                logger.exception(
+                    "craft_stream_failed",
+                    extra={"conversion_id": conversion_id},
+                )
+                await emit(
+                    {
+                        "type": "error",
+                        "code": "internal-error",
+                        "status": 500,
+                        "message": "The craft stream failed unexpectedly.",
+                    }
+                )
+            finally:
+                await queue.put(None)
+
+        producer = asyncio.create_task(produce())
+        try:
+            while True:
+                event = await queue.get()
+                if event is None:
+                    break
+                yield (json.dumps(event, separators=(",", ":")) + "\n").encode()
+        finally:
+            if not producer.done():
+                producer.cancel()
+            await asyncio.gather(producer, return_exceptions=True)
+
+    return StreamingResponse(
+        events(),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
         },
     )
 
-    response.headers["Cache-Control"] = "no-store"
+
+def _craft_response(
+    result: CraftResult,
+    *,
+    invocation: LlmInvocation,
+    conversion_id: str,
+) -> CraftResponse:
     return CraftResponse(
         conversion_id=conversion_id,
         bundle=result.bundle,
@@ -118,6 +234,23 @@ async def craft(
         iterations=result.iterations,
         stop_reason=result.stop_reason,
         toolset_version=AGENT_TOOLSET_VERSION,
+    )
+
+
+def _log_result(result: CraftResult, *, conversion_id: str, actor_id: str) -> None:
+    logger.info(
+        "craft_request_completed",
+        extra={
+            # Counts and decisions only; the narrative and bundle are PHI and never
+            # reach a log (principle 2.6).
+            "conversion_id": conversion_id,
+            "resource_type": result.report.resource_type,
+            "decision": str(result.report.status),
+            "actor_id": actor_id,
+            "model": result.model,
+            "iterations": result.iterations,
+            "stop_reason": result.stop_reason,
+        },
     )
 
 

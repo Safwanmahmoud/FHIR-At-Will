@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
@@ -34,6 +35,8 @@ _MAX_EMPTY_TURNS = 2
 
 _MAX_TOOL_RESULT_CHARS = 4000
 """Bound one tool result fed back into the prompt, so a search cannot blow up context."""
+
+CraftEventSink = Callable[[dict[str, Any]], Awaitable[None]]
 
 
 @dataclass(slots=True)
@@ -71,12 +74,23 @@ class CraftAgent:
         max_terminology_checks: int = 500,
         ig_packages: tuple[str, ...] = (),
         conversion_id: str | None = None,
+        on_event: CraftEventSink | None = None,
+        authorize: bool = True,
     ) -> CraftResult:
         # Authorize once: the gates are pure and the invocation is constant, so
         # re-checking every turn would only repeat work.
-        self.gateway.authorize(invocation, sending_phi=True)
+        if authorize:
+            self.gateway.authorize(invocation, sending_phi=True)
 
         draft = DraftState.new()
+        await _emit(
+            on_event,
+            {
+                "type": "started",
+                "conversion_id": conversion_id,
+                "bundle": draft.to_bundle(),
+            },
+        )
         ctx = ToolContext(
             draft=draft,
             terminology=terminology,
@@ -112,6 +126,15 @@ class CraftAgent:
 
         iterations = 0
         for iterations in range(1, max_iterations + 1):
+            await _emit(
+                on_event,
+                {
+                    "type": "status",
+                    "phase": "llm",
+                    "iteration": iterations,
+                    "message": "Waiting for the model to choose its next tool",
+                },
+            )
             turn = await self.gateway.complete_with_tools(
                 invocation,
                 messages=messages,
@@ -130,6 +153,15 @@ class CraftAgent:
             if not turn.tool_calls:
                 empty_turns += 1
                 trace.append({"iteration": iterations, "event": "no_tool_call"})
+                await _emit(
+                    on_event,
+                    {
+                        "type": "status",
+                        "phase": "no_tool_call",
+                        "iteration": iterations,
+                        "message": "The model returned no tool call; prompting it to continue",
+                    },
+                )
                 if empty_turns > _MAX_EMPTY_TURNS:
                     stop_reason = "no_tool_calls"
                     break
@@ -146,6 +178,15 @@ class CraftAgent:
 
             empty_turns = 0
             for call in turn.tool_calls:
+                await _emit(
+                    on_event,
+                    {
+                        "type": "tool",
+                        "phase": "start",
+                        "iteration": iterations,
+                        "tool": call.name,
+                    },
+                )
                 args, parse_error = _parse_arguments(call.arguments)
                 if parse_error is not None:
                     outcome_content: dict[str, Any] = {"ok": False, "errors": [parse_error]}
@@ -158,8 +199,21 @@ class CraftAgent:
                         }
                     )
                     _append_tool_result(messages, call.id, outcome_content)
+                    await _emit(
+                        on_event,
+                        {
+                            "type": "tool",
+                            "phase": "end",
+                            "iteration": iterations,
+                            "tool": call.name,
+                            "ok": False,
+                            "finish": False,
+                            "error": parse_error,
+                        },
+                    )
                     continue
 
+                bundle_before = draft.to_bundle()
                 outcome = await dispatch_tool(call.name, args, ctx)
                 trace.append(
                     {
@@ -171,6 +225,29 @@ class CraftAgent:
                     }
                 )
                 _append_tool_result(messages, call.id, outcome.content)
+                await _emit(
+                    on_event,
+                    {
+                        "type": "tool",
+                        "phase": "end",
+                        "iteration": iterations,
+                        "tool": call.name,
+                        "ok": outcome.ok,
+                        "finish": outcome.finish,
+                        "error": outcome.error,
+                    },
+                )
+                bundle_after = draft.to_bundle()
+                if bundle_after != bundle_before:
+                    await _emit(
+                        on_event,
+                        {
+                            "type": "draft",
+                            "iteration": iterations,
+                            "tool": call.name,
+                            "bundle": bundle_after,
+                        },
+                    )
                 if outcome.finish:
                     finished = True
 
@@ -181,8 +258,26 @@ class CraftAgent:
             if cost_total is not None and cost_total > cost_cap:
                 stop_reason = "budget_exhausted"
                 trace.append({"iteration": iterations, "event": "budget_exhausted"})
+                await _emit(
+                    on_event,
+                    {
+                        "type": "status",
+                        "phase": "budget_exhausted",
+                        "iteration": iterations,
+                        "message": "The conversion cost budget was exhausted",
+                    },
+                )
                 break
 
+        await _emit(
+            on_event,
+            {
+                "type": "status",
+                "phase": "validation",
+                "iteration": iterations,
+                "message": "Running the final validation cascade",
+            },
+        )
         report = await cascade.run(
             draft.to_bundle(),
             ValidationSpec(
@@ -222,6 +317,11 @@ class CraftAgent:
         )
 
 
+async def _emit(sink: CraftEventSink | None, event: dict[str, Any]) -> None:
+    if sink is not None:
+        await sink(event)
+
+
 def _accumulate(total: dict[str, int], addition: dict[str, int]) -> None:
     for key, value in addition.items():
         if isinstance(value, int):
@@ -250,4 +350,4 @@ def _append_tool_result(
     messages.append({"role": "tool", "tool_call_id": call_id, "content": body})
 
 
-__all__ = ["CraftAgent", "CraftResult"]
+__all__ = ["CraftAgent", "CraftEventSink", "CraftResult"]

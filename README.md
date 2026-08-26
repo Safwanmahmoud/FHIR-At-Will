@@ -36,11 +36,12 @@ The hosted playground supports:
    then run the assembled Bundle through the cascade.
 
 The playground is a thin [landing-page proxy](https://github.com/Safwanmahmoud/FHIR-at-Will-Landing):
-it forwards the visitor's BYOK headers to `/v1/craft` and renders the response,
-including the agent's tool-call trace. Correction now happens inside the API — the
-agent re-validates every edit and self-corrects — so there is no separate landing-side
-repair loop, and every model call passes through this API's provider allowlist,
-qualification, and budget gates.
+it forwards the visitor's BYOK headers to `/v1/craft/stream` and renders the evolving
+FHIR Bundle beside the narrative while each tool runs. A one-line status bar names the
+current tool, and the final response includes the complete tool trace and validation
+report. Correction happens inside the API, so there is no separate landing-side repair
+loop and every model call passes through this API's provider allowlist, qualification,
+and budget gates.
 
 ## What works today
 
@@ -379,10 +380,11 @@ build the record step by step. Each tool validates its own edit before committin
 - **Terminology gate** — every clinical `Coding` the model introduces (LOINC, SNOMED CT,
   RxNorm, UCUM) must be confirmed by `$validate-code`. An unverifiable code fails closed.
 
-A rejected edit is returned to the model with the reason so it can retry; the draft can
-never enter a non-conformant state. When the agent finishes, the assembled Bundle is run
-through the same L1–L5 cascade as every other path. The model chooses *what* to assert;
-the tools guarantee *validity*.
+A rejected edit is returned to the model with the reason so it can retry, and that
+candidate is not committed. When the agent finishes, the assembled Bundle is run through
+the same L1–L5 cascade as every other path. Tool gates substantially constrain individual
+edits, while the final report remains authoritative for whole-Bundle and profile
+conformance.
 
 It uses the same BYOK `X-LLM-*` headers and `conversions:write` scope as `/v1/convert`,
 but **the model must support tool calling** (on OpenRouter, `supported_parameters`
@@ -426,6 +428,10 @@ for step in result["trace"]:
 ```
 
 `/v1/convert` remains available as the single-shot path for models without tool calling.
+For interactive clients, `POST /v1/craft/stream` accepts the same request and headers but
+returns newline-delimited JSON events. `started` and `draft` events contain immutable
+snapshots of the evolving Bundle, `tool` events identify the active operation, and the
+final `complete` event contains the normal `/v1/craft` response fields.
 
 ## API surface
 
@@ -453,12 +459,14 @@ for step in result["trace"]:
 | `POST` | `/v1/validate/outcome` | Validation as `OperationOutcome` |
 | `POST` | `/v1/convert` | Single-pass BYOK narrative conversion and validation |
 | `POST` | `/v1/craft` | Agentic BYOK narrative conversion via validated tools |
+| `POST` | `/v1/craft/stream` | Live NDJSON tool activity, draft snapshots, and final craft result |
 | `POST` | `/v1/llm/probe` | PHI-free provider probe |
 | `POST` | `/v1/terminology/validate-code` | Code and ValueSet validation |
 | `POST` | `/v1/terminology/map` | ConceptMap `$translate` |
 | `POST` | `/fhir/R4/$validate` | FHIR-native validation operation |
 
-`/v1/convert`, `/v1/craft`, and `/v1/llm/probe` require the `conversions:write` scope.
+`/v1/convert`, `/v1/craft`, `/v1/craft/stream`, and `/v1/llm/probe` require the
+`conversions:write` scope.
 
 HL7 v2, C-CDA, and tabular conversion stubs return `501`, as do the FHIR facade
 operations `/fhir/R4/$convert` and `/fhir/R4/$extract`. Deterministic source formats

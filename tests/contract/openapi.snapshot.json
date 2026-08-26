@@ -2142,6 +2142,168 @@
         ]
       }
     },
+    "/v1/craft/stream": {
+      "post": {
+        "description": "Stream tool activity and immutable snapshots of the evolving FHIR draft.",
+        "operationId": "post_craft_stream",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-Provider",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Provider"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-Model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Model"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-Base-Url",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Base-Url"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-Extra-Headers",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Extra-Headers"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-PHI-Egress-Acknowledged",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Phi-Egress-Acknowledged"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/x-ndjson": {}
+            },
+            "description": "Newline-delimited JSON events. Draft events contain the live Bundle; the final complete event contains the normal CraftResponse fields."
+          },
+          "400": {
+            "description": "No LLM credentials, or the provider rejected the key."
+          },
+          "422": {
+            "description": "The model is not qualified, does not support tool calling, the input exceeds the context window, or the budget would be exceeded."
+          },
+          "429": {
+            "description": "The LLM provider rate-limited the request. Retryable."
+          },
+          "451": {
+            "description": "The target LLM host is blocked by egress policy."
+          },
+          "503": {
+            "description": "The validator or terminology server is unavailable; failing closed."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Stream a tool-driven narrative-to-FHIR conversion as NDJSON (BYOK)",
+        "tags": [
+          "conversion"
+        ]
+      }
+    },
     "/v1/error-codes": {
       "get": {
         "description": "Publish the error catalogue as a FHIR ``CodeSystem``.\n\nUnauthenticated on purpose: it contains no tenant data, and a client should\nbe able to fetch the code list before it has credentials.",

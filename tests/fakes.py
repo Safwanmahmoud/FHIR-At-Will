@@ -29,7 +29,7 @@ from fhirbridge.fhir.validator_client import (
     ValidatorIssue,
     ValidatorOutcome,
 )
-from fhirbridge.llm.gateway import LlmProbeResult, LlmResult
+from fhirbridge.llm.gateway import LlmProbeResult, LlmResult, LlmToolTurn
 from fhirbridge.llm.invocation import LlmInvocation
 from fhirbridge.terminology.models import (
     Coding,
@@ -212,6 +212,30 @@ class FakeLlmGateway:
     probe_error: BaseException | None = None
     complete_calls: list[tuple[str, str]] = field(default_factory=list)
     probe_calls: list[LlmInvocation] = field(default_factory=list)
+    tool_turns: list[LlmToolTurn] = field(default_factory=list)
+    tool_calls: list[list[dict[str, Any]]] = field(default_factory=list)
+
+    def authorize(self, invocation: LlmInvocation, *, sending_phi: bool) -> None:
+        del invocation, sending_phi
+
+    async def complete_with_tools(
+        self,
+        invocation: LlmInvocation,
+        *,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        tool_choice: str = "auto",
+        max_tokens: int = 4096,
+        authorize: bool = True,
+    ) -> LlmToolTurn:
+        del invocation, tools, tool_choice, max_tokens, authorize
+        self.tool_calls.append(messages)
+        if self.error is not None:
+            raise self.error
+        index = len(self.tool_calls) - 1
+        if index >= len(self.tool_turns):
+            raise AssertionError("FakeLlmGateway has no scripted tool turn remaining")
+        return self.tool_turns[index]
 
     async def complete_json(
         self,
