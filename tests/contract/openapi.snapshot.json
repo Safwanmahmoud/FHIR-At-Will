@@ -941,6 +941,105 @@
         "title": "TerminologyMapResponse",
         "type": "object"
       },
+      "TerminologySearchCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "TerminologySearchCandidate",
+        "type": "object"
+      },
+      "TerminologySearchRequest": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /v1/terminology/search``.",
+        "properties": {
+          "count": {
+            "default": 10,
+            "description": "Maximum number of candidates to return.",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "query": {
+            "description": "Text to search for.",
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "CodeSystem canonical URL. Required unless value_set is given.",
+            "title": "System"
+          },
+          "value_set": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ValueSet canonical URL to search instead of an entire CodeSystem.",
+            "title": "Value Set"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "TerminologySearchRequest",
+        "type": "object"
+      },
+      "TerminologySearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/TerminologySearchCandidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          }
+        },
+        "title": "TerminologySearchResponse",
+        "type": "object"
+      },
       "ValidateCodeRequest": {
         "additionalProperties": false,
         "description": "Body of ``POST /v1/terminology/validate-code``.",
@@ -2663,6 +2762,73 @@
           }
         ],
         "summary": "Translate a code between systems via $translate",
+        "tags": [
+          "terminology"
+        ]
+      }
+    },
+    "/v1/terminology/search": {
+      "post": {
+        "operationId": "post_terminology_search",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TerminologySearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TerminologySearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "The terminology server is unavailable. Failing closed: an unanswered question is never reported as 'code not valid'."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Search a CodeSystem or ValueSet for candidate codes",
         "tags": [
           "terminology"
         ]

@@ -270,6 +270,40 @@ class ValidateCodeResponse(BaseModel):
     issues: list[str] = Field(default_factory=list)
 
 
+class TerminologySearchRequest(BaseModel):
+    """Body of ``POST /v1/terminology/search``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=1, description="Text to search for.")
+    system: str | None = Field(
+        default=None,
+        description="CodeSystem canonical URL. Required unless value_set is given.",
+    )
+    value_set: str | None = Field(
+        default=None,
+        description="ValueSet canonical URL to search instead of an entire CodeSystem.",
+    )
+    count: Annotated[int, Field(ge=1, le=100)] = Field(
+        default=10,
+        description="Maximum number of candidates to return.",
+    )
+
+
+class TerminologySearchCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    system: str | None = None
+    code: str
+    display: str | None = None
+
+
+class TerminologySearchResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidates: list[TerminologySearchCandidate] = Field(default_factory=list)
+
+
 class TerminologyMapRequest(BaseModel):
     """Body of ``POST /v1/terminology/map`` (a ``$translate`` passthrough)."""
 
@@ -392,6 +426,9 @@ __all__ = [
     "TerminologyMapMatch",
     "TerminologyMapRequest",
     "TerminologyMapResponse",
+    "TerminologySearchCandidate",
+    "TerminologySearchRequest",
+    "TerminologySearchResponse",
     "ValidateCodeRequest",
     "ValidateCodeResponse",
     "ValidateRequest",

@@ -51,6 +51,7 @@ IMPLEMENTED_ENDPOINTS: list[str] = [
     "POST /v1/craft",
     "POST /v1/craft/stream",
     "POST /v1/llm/probe",
+    "POST /v1/terminology/search",
     "POST /v1/terminology/validate-code",
     "POST /v1/terminology/map",
     "GET /fhir/R4/metadata",

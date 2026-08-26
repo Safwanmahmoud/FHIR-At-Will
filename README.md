@@ -461,6 +461,7 @@ final `complete` event contains the normal `/v1/craft` response fields.
 | `POST` | `/v1/craft` | Agentic BYOK narrative conversion via validated tools |
 | `POST` | `/v1/craft/stream` | Live NDJSON tool activity, draft snapshots, and final craft result |
 | `POST` | `/v1/llm/probe` | PHI-free provider probe |
+| `POST` | `/v1/terminology/search` | Search a CodeSystem or ValueSet for candidate codes |
 | `POST` | `/v1/terminology/validate-code` | Code and ValueSet validation |
 | `POST` | `/v1/terminology/map` | ConceptMap `$translate` |
 | `POST` | `/fhir/R4/$validate` | FHIR-native validation operation |

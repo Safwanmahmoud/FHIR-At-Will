@@ -21,6 +21,9 @@ from fhirbridge.api.schemas import (
     TerminologyMapMatch,
     TerminologyMapRequest,
     TerminologyMapResponse,
+    TerminologySearchCandidate,
+    TerminologySearchRequest,
+    TerminologySearchResponse,
     ValidateCodeRequest,
     ValidateCodeResponse,
 )
@@ -83,6 +86,49 @@ async def validate_code(
         message=result.message,
         issues=list(result.issues),
     )
+
+
+@router.post(
+    "/search",
+    summary="Search a CodeSystem or ValueSet for candidate codes",
+    response_model=TerminologySearchResponse,
+    responses={503: _UNAVAILABLE},
+)
+async def search_terminology(
+    body: TerminologySearchRequest,
+    principal: PrincipalDep,
+    terminology: TerminologyDep,
+    response: Response,
+) -> TerminologySearchResponse:
+    if not body.system and not body.value_set:
+        raise InvalidRequestError("Supply 'system' or 'value_set' to search.")
+
+    value_set = body.value_set or f"{body.system}?fhir_vs"
+    result = await terminology.expand(
+        value_set=value_set,
+        filter_text=body.query,
+        count=body.count,
+    )
+    candidates = [
+        TerminologySearchCandidate(
+            system=coding.system,
+            code=coding.code,
+            display=coding.display,
+        )
+        for coding in result.contains
+        if coding.code
+    ]
+    logger.info(
+        "terminology_search_completed",
+        extra={
+            # Query text can be clinical and is deliberately not logged.
+            "system": body.system or "",
+            "candidate_count": len(candidates),
+            "actor_id": principal.actor_id,
+        },
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return TerminologySearchResponse(candidates=candidates)
 
 
 @router.post(

@@ -23,6 +23,7 @@ from tests.helpers import TERMINOLOGY_URL, fhir_json, operation_outcome, paramet
 CODE_SYSTEM_VALIDATE = f"{TERMINOLOGY_URL}/CodeSystem/$validate-code"
 VALUE_SET_VALIDATE = f"{TERMINOLOGY_URL}/ValueSet/$validate-code"
 TRANSLATE = f"{TERMINOLOGY_URL}/ConceptMap/$translate"
+EXPAND = f"{TERMINOLOGY_URL}/ValueSet/$expand"
 
 LOINC = "http://loinc.org"
 HEART_RATE = "8867-4"
@@ -179,6 +180,50 @@ class TestValidateCode:
         assert HEART_RATE.encode() in route.calls.last.request.content
 
 
+class TestTerminologySearch:
+    async def test_a_code_system_search_returns_candidates(
+        self, client: httpx.AsyncClient, mock_http: respx.MockRouter
+    ) -> None:
+        mock_http.post(EXPAND).mock(
+            return_value=fhir_json(
+                {
+                    "resourceType": "ValueSet",
+                    "expansion": {
+                        "total": 1,
+                        "contains": [
+                            {
+                                "system": LOINC,
+                                "code": HEART_RATE,
+                                "display": "Heart rate",
+                            }
+                        ],
+                    },
+                }
+            )
+        )
+
+        response = await client.post(
+            "/v1/terminology/search",
+            json={"query": "heart rate", "system": LOINC, "count": 10},
+        )
+
+        assert response.status_code == 200
+        assert response.headers["Cache-Control"] == "no-store"
+        assert response.json()["candidates"] == [
+            {"system": LOINC, "code": HEART_RATE, "display": "Heart rate"}
+        ]
+
+    async def test_a_search_requires_a_system_or_value_set(
+        self, client: httpx.AsyncClient
+    ) -> None:
+        response = await client.post(
+            "/v1/terminology/search",
+            json={"query": "heart rate"},
+        )
+
+        assert response.status_code == 400
+
+
 class TestTerminologyMap:
     async def test_a_translation_returns_the_servers_matches(
         self, client: httpx.AsyncClient, mock_http: respx.MockRouter
@@ -288,7 +333,14 @@ class TestTerminologyMap:
 class TestNoGetEndpointTakesClinicalText:
     """AGENTS.md 3: no ``GET`` endpoint accepts clinical text as a query parameter."""
 
-    @pytest.mark.parametrize("path", ["/v1/terminology/validate-code", "/v1/terminology/map"])
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/v1/terminology/validate-code",
+            "/v1/terminology/search",
+            "/v1/terminology/map",
+        ],
+    )
     async def test_get_is_not_allowed(self, client: httpx.AsyncClient, path: str) -> None:
         response = await client.get(path, params={"system": LOINC, "code": HEART_RATE})
 
