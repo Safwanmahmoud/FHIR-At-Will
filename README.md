@@ -433,6 +433,11 @@ returns newline-delimited JSON events. `started` and `draft` events contain immu
 snapshots of the evolving Bundle, `tool` events identify the active operation, and the
 final `complete` event contains the normal `/v1/craft` response fields.
 
+Accuracy benchmarks may set `"validate_output": false` to skip `validate_draft` and the
+final cascade. Such responses have `"validated": false` and `"report": null`; they are
+comparison artifacts only and must not be used clinically. Validation remains enabled by
+default for both craft endpoints and the playground.
+
 ## API surface
 
 ### Public

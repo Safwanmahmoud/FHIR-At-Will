@@ -90,6 +90,7 @@ async def craft(
         max_terminology_checks=body.max_terminology_checks,
         ig_packages=settings.ig_coordinates,
         conversion_id=conversion_id,
+        validate_output=body.validate_output,
     )
 
     _log_result(result, conversion_id=conversion_id, actor_id=principal.actor_id)
@@ -149,6 +150,7 @@ async def craft_stream(
                     conversion_id=conversion_id,
                     on_event=emit,
                     authorize=False,
+                    validate_output=body.validate_output,
                 )
                 _log_result(result, conversion_id=conversion_id, actor_id=actor_id)
                 payload = _craft_response(
@@ -222,6 +224,7 @@ def _craft_response(
         conversion_id=conversion_id,
         bundle=result.bundle,
         report=result.report,
+        validated=result.validated,
         llm=LlmCallInfo(
             provider=invocation.provider,
             model=result.model,
@@ -244,8 +247,13 @@ def _log_result(result: CraftResult, *, conversion_id: str, actor_id: str) -> No
             # Counts and decisions only; the narrative and bundle are PHI and never
             # reach a log (principle 2.6).
             "conversion_id": conversion_id,
-            "resource_type": result.report.resource_type,
-            "decision": str(result.report.status),
+            "resource_type": (
+                result.report.resource_type if result.report is not None else "Bundle"
+            ),
+            "decision": (
+                str(result.report.status) if result.report is not None else "not_validated"
+            ),
+            "validated": result.validated,
             "actor_id": actor_id,
             "model": result.model,
             "iterations": result.iterations,

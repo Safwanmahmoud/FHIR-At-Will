@@ -102,8 +102,6 @@ class ConvertRequest(BaseModel):
         default=500,
         description="Cap on distinct $validate-code calls for the L3 layer.",
     )
-
-
 class CraftRequest(BaseModel):
     """Body of ``POST /v1/craft``.
 
@@ -134,6 +132,14 @@ class CraftRequest(BaseModel):
     max_terminology_checks: Annotated[int, Field(ge=1, le=2000)] = Field(
         default=500,
         description="Cap on distinct $validate-code calls for the L3 layer.",
+    )
+    validate_output: bool = Field(
+        default=True,
+        description=(
+            "Run validate_draft and the final validation cascade. Set false only for "
+            "comparison/evaluation workloads; the returned Bundle will be explicitly "
+            "marked unvalidated and must not be used clinically."
+        ),
     )
 
 
@@ -193,9 +199,14 @@ class CraftResponse(BaseModel):
     bundle: FhirResource = Field(
         description="The FHIR R4 Bundle the agent assembled through validated tool edits."
     )
-    report: ValidationReport = Field(
-        description="The L1-L5 validation of the assembled bundle. Read status before trusting it."
+    report: ValidationReport | None = Field(
+        default=None,
+        description=(
+            "The L1-L5 validation of the assembled bundle, or null when the caller "
+            "explicitly disabled output validation."
+        ),
     )
+    validated: bool = Field(description="Whether the final validation cascade ran.")
     llm: LlmCallInfo = Field(
         description="Aggregate provenance across every model call the agent made."
     )

@@ -213,6 +213,12 @@
             "minLength": 1,
             "title": "Text",
             "type": "string"
+          },
+          "validate_output": {
+            "default": true,
+            "description": "Run validate_draft and the final validation cascade. Set false only for comparison/evaluation workloads; the returned Bundle will be explicitly marked unvalidated and must not be used clinically.",
+            "title": "Validate Output",
+            "type": "boolean"
           }
         },
         "required": [
@@ -246,8 +252,15 @@
             "description": "Aggregate provenance across every model call the agent made."
           },
           "report": {
-            "$ref": "#/components/schemas/ValidationReport",
-            "description": "The L1-L5 validation of the assembled bundle. Read status before trusting it."
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ValidationReport"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The L1-L5 validation of the assembled bundle, or null when the caller explicitly disabled output validation."
           },
           "stop_reason": {
             "description": "Why the loop ended: finished, max_iterations, budget_exhausted, or no_tool_calls.",
@@ -266,12 +279,17 @@
             },
             "title": "Trace",
             "type": "array"
+          },
+          "validated": {
+            "description": "Whether the final validation cascade ran.",
+            "title": "Validated",
+            "type": "boolean"
           }
         },
         "required": [
           "conversion_id",
           "bundle",
-          "report",
+          "validated",
           "llm",
           "iterations",
           "stop_reason",

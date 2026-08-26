@@ -82,4 +82,29 @@ async def test_stream_shows_tool_activity_and_live_draft(
     assert complete["bundle"] == draft["bundle"]
     assert complete["stop_reason"] == "finished"
     assert complete["iterations"] == 2
+    assert complete["validated"] is True
+    assert complete["report"] is not None
+
+
+async def test_stream_can_explicitly_skip_validation_for_comparison_only_runs(
+    app: FastAPI,
+    client: httpx.AsyncClient,
+    all_dependencies_healthy: None,
+) -> None:
+    gateway = FakeLlmGateway(tool_turns=[_turn("call_1", "finish", {})])
+    app.dependency_overrides[get_llm_gateway] = lambda: gateway
+
+    response = await client.post(
+        "/v1/craft/stream",
+        json={"text": "Synthetic patient.", "validate_output": False},
+        headers=BYOK_HEADERS,
+    )
+
+    assert response.status_code == 200
+    events = [json.loads(line) for line in response.text.splitlines()]
+    complete = events[-1]
+    assert complete["type"] == "complete"
+    assert complete["validated"] is False
+    assert complete["report"] is None
+    assert any(event.get("phase") == "validation_skipped" for event in events)
 

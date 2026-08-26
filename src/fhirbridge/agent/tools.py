@@ -87,6 +87,7 @@ class ToolContext:
     max_terminology_checks: int = 500
     ig_packages: tuple[str, ...] = ()
     conversion_id: str | None = None
+    validation_enabled: bool = True
 
 
 @dataclass(slots=True)
@@ -540,6 +541,18 @@ def _grow(target: list[Any], index: int) -> None:
 
 async def _validate_draft(ctx: ToolContext, args: dict[str, Any]) -> ToolOutcome:
     del args
+    if not ctx.validation_enabled:
+        return ToolOutcome(
+            ok=True,
+            content={
+                "ok": True,
+                "skipped": True,
+                "message": (
+                    "Validation is disabled for this comparison-only request. "
+                    "Finish after adding all narrative facts."
+                ),
+            },
+        )
     report = await ctx.cascade.run(
         ctx.draft.to_bundle(),
         ValidationSpec(

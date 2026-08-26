@@ -185,6 +185,17 @@ class TestSearchTerminology:
         assert outcome.content["candidates"][0]["code"] == "8867-4"
 
 
+class TestValidateDraft:
+    async def test_comparison_only_mode_skips_the_cascade(self) -> None:
+        ctx = _ctx(FakeTerminology())
+        ctx.validation_enabled = False
+
+        outcome = await dispatch_tool("validate_draft", {}, ctx)
+
+        assert outcome.ok
+        assert outcome.content["skipped"] is True
+
+
 class TestSetElement:
     async def test_it_sets_a_nested_element_and_validates(self) -> None:
         ctx = _ctx(FakeTerminology())

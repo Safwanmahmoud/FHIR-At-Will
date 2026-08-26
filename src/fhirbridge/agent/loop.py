@@ -44,7 +44,8 @@ class CraftResult:
     """The outcome of one crafting run."""
 
     bundle: dict[str, Any]
-    report: ValidationReport
+    report: ValidationReport | None
+    validated: bool
     trace: list[dict[str, Any]]
     model: str
     usage: dict[str, int] = field(default_factory=dict)
@@ -76,6 +77,7 @@ class CraftAgent:
         conversion_id: str | None = None,
         on_event: CraftEventSink | None = None,
         authorize: bool = True,
+        validate_output: bool = True,
     ) -> CraftResult:
         # Authorize once: the gates are pure and the invocation is constant, so
         # re-checking every turn would only repeat work.
@@ -100,6 +102,7 @@ class CraftAgent:
             max_terminology_checks=max_terminology_checks,
             ig_packages=ig_packages,
             conversion_id=conversion_id,
+            validation_enabled=validate_output,
         )
 
         profile_text = ", ".join(profiles) if profiles else "none"
@@ -269,27 +272,39 @@ class CraftAgent:
                 )
                 break
 
-        await _emit(
-            on_event,
-            {
-                "type": "status",
-                "phase": "validation",
-                "iteration": iterations,
-                "message": "Running the final validation cascade",
-            },
-        )
-        report = await cascade.run(
-            draft.to_bundle(),
-            ValidationSpec(
-                profiles=profiles,
-                layers=layers,
-                max_terminology_checks=max_terminology_checks,
-                ig_packages=ig_packages,
-                conversion_id=conversion_id,
-            ),
-        )
-        report.versions.model = {"craft": model}
-        report.versions.prompt_set = PROMPT_SET_VERSION
+        report: ValidationReport | None = None
+        if validate_output:
+            await _emit(
+                on_event,
+                {
+                    "type": "status",
+                    "phase": "validation",
+                    "iteration": iterations,
+                    "message": "Running the final validation cascade",
+                },
+            )
+            report = await cascade.run(
+                draft.to_bundle(),
+                ValidationSpec(
+                    profiles=profiles,
+                    layers=layers,
+                    max_terminology_checks=max_terminology_checks,
+                    ig_packages=ig_packages,
+                    conversion_id=conversion_id,
+                ),
+            )
+            report.versions.model = {"craft": model}
+            report.versions.prompt_set = PROMPT_SET_VERSION
+        else:
+            await _emit(
+                on_event,
+                {
+                    "type": "status",
+                    "phase": "validation_skipped",
+                    "iteration": iterations,
+                    "message": "Output validation was skipped for comparison-only evaluation",
+                },
+            )
 
         logger.info(
             "craft_completed",
@@ -297,8 +312,9 @@ class CraftAgent:
                 "conversion_id": conversion_id,
                 "iterations": iterations,
                 "stop_reason": stop_reason,
-                "decision": str(report.status),
-                "resource_count": report.resource_count,
+                "decision": str(report.status) if report is not None else "not_validated",
+                "resource_count": len(draft.resources),
+                "validated": validate_output,
                 "toolset": AGENT_TOOLSET_VERSION,
             },
         )
@@ -306,6 +322,7 @@ class CraftAgent:
         return CraftResult(
             bundle=draft.to_bundle(),
             report=report,
+            validated=validate_output,
             trace=trace,
             model=model,
             usage=usage_total,
