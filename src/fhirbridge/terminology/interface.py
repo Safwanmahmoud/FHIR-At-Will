@@ -24,6 +24,17 @@ from fhirbridge.terminology.models import (
     ValidateCodeResult,
 )
 
+_SEARCH_VALUE_SETS = {
+    # FHIR's generic ``?fhir_vs`` implicit ValueSet is not implemented by every
+    # server. LOINC publishes this canonical whole-code-system ValueSet.
+    "http://loinc.org": "http://loinc.org/vs",
+}
+
+
+def search_value_set_for_system(system: str) -> str:
+    """Return a searchable ValueSet canonical for an entire CodeSystem."""
+    return _SEARCH_VALUE_SETS.get(system, f"{system}?fhir_vs")
+
 
 @runtime_checkable
 class TerminologyClient(Protocol):
@@ -91,4 +102,4 @@ class TerminologyClient(Protocol):
         ...
 
 
-__all__ = ["TerminologyClient"]
+__all__ = ["TerminologyClient", "search_value_set_for_system"]

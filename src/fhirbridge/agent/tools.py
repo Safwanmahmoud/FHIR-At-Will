@@ -26,7 +26,7 @@ from typing import Any
 
 from fhirbridge.agent.draft import PATIENT_ALIAS, DraftState
 from fhirbridge.domain.errors import DomainError, TerminologyUnavailableError
-from fhirbridge.terminology.interface import TerminologyClient
+from fhirbridge.terminology.interface import TerminologyClient, search_value_set_for_system
 from fhirbridge.validation.cascade import ValidationCascade, ValidationSpec
 from fhirbridge.validation.models import IssueSeverity, ValidationLayer
 from fhirbridge.validation.structural import validate_structure
@@ -433,8 +433,7 @@ async def _search_terminology(ctx: ToolContext, args: dict[str, Any]) -> ToolOut
     if not value_set:
         if not system:
             return _reject(["provide either 'system' or 'value_set' to search"])
-        # The implicit ValueSet of an entire CodeSystem (FHIR terminology 4.1).
-        value_set = f"{system}?fhir_vs"
+        value_set = search_value_set_for_system(system)
     count = _num(args, "count")
     limit = int(count) if isinstance(count, (int, float)) and count > 0 else 10
 

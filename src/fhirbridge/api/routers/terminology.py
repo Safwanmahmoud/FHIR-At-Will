@@ -28,6 +28,7 @@ from fhirbridge.api.schemas import (
     ValidateCodeResponse,
 )
 from fhirbridge.domain.errors import InvalidRequestError
+from fhirbridge.terminology.interface import search_value_set_for_system
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +104,7 @@ async def search_terminology(
     if not body.system and not body.value_set:
         raise InvalidRequestError("Supply 'system' or 'value_set' to search.")
 
-    value_set = body.value_set or f"{body.system}?fhir_vs"
+    value_set = body.value_set or search_value_set_for_system(body.system or "")
     result = await terminology.expand(
         value_set=value_set,
         filter_text=body.query,

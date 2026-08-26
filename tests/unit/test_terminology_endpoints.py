@@ -184,7 +184,7 @@ class TestTerminologySearch:
     async def test_a_code_system_search_returns_candidates(
         self, client: httpx.AsyncClient, mock_http: respx.MockRouter
     ) -> None:
-        mock_http.post(EXPAND).mock(
+        route = mock_http.post(EXPAND).mock(
             return_value=fhir_json(
                 {
                     "resourceType": "ValueSet",
@@ -209,6 +209,7 @@ class TestTerminologySearch:
 
         assert response.status_code == 200
         assert response.headers["Cache-Control"] == "no-store"
+        assert b"http://loinc.org/vs" in route.calls.last.request.content
         assert response.json()["candidates"] == [
             {"system": LOINC, "code": HEART_RATE, "display": "Heart rate"}
         ]
