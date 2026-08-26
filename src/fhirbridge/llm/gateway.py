@@ -328,6 +328,11 @@ class LlmGateway:
             # providers, so a tools call never also sets response_format.
             kwargs["tools"] = tools
             kwargs["tool_choice"] = tool_choice or "auto"
+            # Let the model emit several tool calls in one turn, collapsing what
+            # would otherwise be one round-trip per fact. drop_params keeps
+            # providers that do not accept this flag from rejecting the request.
+            kwargs["parallel_tool_calls"] = True
+            kwargs["drop_params"] = True
         elif json_mode:
             kwargs["response_format"] = {"type": "json_object"}
         return kwargs
