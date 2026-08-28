@@ -85,7 +85,7 @@
       },
       "ConvertRequest": {
         "additionalProperties": false,
-        "description": "Body of ``POST /v1/convert``.\n\nThe clinical narrative is sent in the body, never a query parameter, because\nit is PHI (principle 2.6). The generated bundle is validated before it is\nreturned, so the response is a report as much as a conversion.",
+        "description": "Body of ``POST /v1/NAR2FHIR``.\n\nThe clinical narrative is sent in the body, never a query parameter, because\nit is PHI (principle 2.6). The generated bundle is validated before it is\nreturned, so the response is a report as much as a conversion.",
         "properties": {
           "layers": {
             "anyOf": [
@@ -138,7 +138,7 @@
       },
       "ConvertResponse": {
         "additionalProperties": false,
-        "description": "Body of ``POST /v1/convert``.",
+        "description": "Body of ``POST /v1/NAR2FHIR``.",
         "properties": {
           "bundle": {
             "additionalProperties": true,
@@ -609,7 +609,7 @@
       },
       "LlmCallInfo": {
         "additionalProperties": false,
-        "description": "Provenance for one model call. No prompt or completion content (principle 2.6).",
+        "description": "Aggregate model-call provenance. No prompt or completion content (principle 2.6).",
         "properties": {
           "cost_usd": {
             "anyOf": [
@@ -629,7 +629,7 @@
             "type": "integer"
           },
           "model": {
-            "description": "The model id the provider reported answering with.",
+            "description": "The model id reported by the final generation call.",
             "title": "Model",
             "type": "string"
           },
@@ -646,7 +646,7 @@
             "additionalProperties": {
               "type": "integer"
             },
-            "description": "Token counts reported by the provider, when available.",
+            "description": "Token counts aggregated across the endpoint's calls, when available.",
             "title": "Usage",
             "type": "object"
           }
@@ -1873,64 +1873,10 @@
         ]
       }
     },
-    "/v1/capabilities": {
-      "get": {
-        "operationId": "get_capabilities",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CapabilitiesResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "What this build can do, and what it cannot",
-        "tags": [
-          "platform"
-        ]
-      }
-    },
-    "/v1/convert": {
+    "/v1/NAR2FHIR": {
       "post": {
-        "description": "Generate a FHIR bundle from narrative, then validate it before returning.",
-        "operationId": "post_convert",
+        "description": "Extract grounded facts, assemble a FHIR Bundle, then validate it.",
+        "operationId": "post_NAR2FHIR",
         "parameters": [
           {
             "in": "header",
@@ -2087,9 +2033,63 @@
             "bearerAuth": []
           }
         ],
-        "summary": "Convert clinical narrative to a validated FHIR Bundle (BYOK)",
+        "summary": "Convert narrative to a validated FHIR Bundle with grounded extraction (BYOK)",
         "tags": [
           "conversion"
+        ]
+      }
+    },
+    "/v1/capabilities": {
+      "get": {
+        "operationId": "get_capabilities",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilitiesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "What this build can do, and what it cannot",
+        "tags": [
+          "platform"
         ]
       }
     },

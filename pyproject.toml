@@ -44,7 +44,7 @@ dependencies = [
   "opentelemetry-sdk==1.44.0",
   "opentelemetry-instrumentation-fastapi==0.65b0",
   "opentelemetry-exporter-otlp-proto-http==1.44.0",
-  # BYOK/BYOM LLM gateway. Provider-agnostic client used by POST /v1/convert.
+  # BYOK/BYOM LLM gateway. Provider-agnostic client used by POST /v1/NAR2FHIR.
   "litellm==1.97.0",
 ]
 

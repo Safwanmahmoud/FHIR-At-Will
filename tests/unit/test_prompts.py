@@ -9,14 +9,15 @@ hash: any edit to a prompt fails here until the author bumps both the hash and
 from __future__ import annotations
 
 from fhirbridge.llm.prompts import (
-    NARRATIVE_TO_BUNDLE,
+    ENTITIES_TO_FHIR_BUNDLE,
     NARRATIVE_TO_DRAFT_AGENT,
+    NARRATIVE_TO_ENTITIES,
     PROMPT_SET,
     PROMPT_SET_VERSION,
     prompt_set_fingerprint,
 )
 
-PINNED_FINGERPRINT = "f4cf155eafa3b6a118434e02dcbc841925060498f7598ff18600fcebf5bc8a16"
+PINNED_FINGERPRINT = "ea860c3fe775e8d6953b7d963c6ce70df15e3c310372711b1d0d9c37747bc67f"
 
 
 def test_the_prompt_set_has_not_drifted_from_its_pinned_hash() -> None:
@@ -32,12 +33,18 @@ def test_the_fingerprint_is_deterministic() -> None:
 
 def test_the_version_is_stamped_and_the_set_is_populated() -> None:
     assert PROMPT_SET_VERSION
-    assert NARRATIVE_TO_BUNDLE.id in PROMPT_SET
     assert NARRATIVE_TO_DRAFT_AGENT.id in PROMPT_SET
+    assert NARRATIVE_TO_ENTITIES.id in PROMPT_SET
+    assert ENTITIES_TO_FHIR_BUNDLE.id in PROMPT_SET
 
 
 def test_the_user_template_renders_narrative_and_profiles() -> None:
-    rendered = NARRATIVE_TO_BUNDLE.render_user(narrative="chest pain", profiles="us-core-patient")
+    rendered = ENTITIES_TO_FHIR_BUNDLE.render_user(
+        narrative="chest pain",
+        profiles="us-core-patient",
+        entities="[]",
+        field_reference="Patient fields",
+    )
 
     assert "chest pain" in rendered
     assert "us-core-patient" in rendered

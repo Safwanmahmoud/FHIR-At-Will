@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from importlib import resources
 from typing import Final
 
+from fhirbridge.llm.nar2fhir import DATATYPE_LEGEND, resource_catalog_text
 from fhirbridge.version import PROMPT_SET_VERSION
 
 TERMINOLOGY_REFERENCE: Final[str] = (
@@ -39,49 +40,62 @@ class PromptTemplate:
     system: str
     user_template: str
 
-    def render_user(self, *, narrative: str, profiles: str) -> str:
-        return self.user_template.format(narrative=narrative, profiles=profiles)
+    def render_user(self, **values: str) -> str:
+        return self.user_template.format(**values)
 
 
-NARRATIVE_TO_BUNDLE: Final[PromptTemplate] = PromptTemplate(
-    id="narrative_to_bundle",
+NARRATIVE_TO_ENTITIES: Final[PromptTemplate] = PromptTemplate(
+    id="nar2fhir_extract_entities",
     system=(
-        "You are a clinical data extraction system that converts clinical narrative "
-        "into FHIR R4 (4.0.1). You do not diagnose, advise, or infer.\n"
-        "\n"
-        'Return exactly one JSON object: a FHIR Bundle with type "collection". '
-        "Return only the JSON object, with no prose and no markdown fences.\n"
-        "\n"
-        "Rules:\n"
-        "1. Assert only what the source text states. Never invent facts, values, "
-        "dates, codes, or resources that the text does not support. Omission is "
-        "always preferable to fabrication.\n"
-        "2. Create a Patient resource for the subject and give every clinical "
-        "resource a subject reference to it. Use urn:uuid: fullUrl values and "
-        "reference resources by those fullUrls.\n"
-        "3. Populate the fields each resource type requires (for example "
-        "Observation.status and Observation.code). If the text does not supply a "
-        "required value, prefer omitting the whole resource over guessing.\n"
-        "4. Use standard code systems (LOINC for labs and vitals, SNOMED CT for "
-        "problems and procedures, RxNorm for medications, ICD-10-CM for diagnoses). "
-        "Include a coding only when you are confident of the exact code; otherwise "
-        "provide only CodeableConcept.text.\n"
-        "5. Apply the requested US Core profiles by setting meta.profile when a "
-        "resource is clearly of that kind. Do not claim a profile you cannot satisfy.\n"
-        "6. Use ISO 8601 for dates and UCUM for units.\n"
-        "\n"
-        "Your output is independently validated against FHIR profiles, terminology "
-        "and clinical plausibility rules. Unsupported or implausible content will be "
-        "rejected, so precision and restraint serve you."
+        "Extract every explicitly stated clinical and demographic entity from the "
+        "narrative. Return exactly one JSON object containing only an `entities` array. "
+        "Each item must contain exactly `resourceType`, `keyword`, and `value`.\n\n"
+        "`resourceType` must be an exact resource type from the catalog. `keyword` must "
+        "be an exact allowed key under that same resource type. `value` must preserve "
+        "the source wording or be minimally normalized.\n\n"
+        "Create a separate item for every entity, even when items share a key or type. "
+        "Use each description to choose the resource whose purpose matches the fact. "
+        "Choose the most specific allowed key. Never infer missing facts, return FHIR "
+        "paths, or emit administrative keys such as resourceType, id, meta, or text.\n\n"
+        "FHIR R4 resource catalog with observed keys:\n"
+        + resource_catalog_text()
     ),
     user_template=(
-        "Convert the following clinical note into a single FHIR R4 Bundle "
-        "(type collection).\n"
-        "\n"
-        "Requested profiles (apply where applicable; may be empty): {profiles}\n"
-        "\n"
-        "Clinical note:\n"
-        "{narrative}"
+        "Extract grounded FHIR entities from this clinical narrative.\n\n"
+        "Clinical narrative:\n{narrative}"
+    ),
+)
+
+ENTITIES_TO_FHIR_BUNDLE: Final[PromptTemplate] = PromptTemplate(
+    id="nar2fhir_entities_to_bundle",
+    system=(
+        "You are a FHIR R4 (4.0.1) assembly system. Convert a clinical narrative and "
+        "its grounded extracted entities into valid FHIR resources. Return exactly one "
+        'JSON object: {"resourceType":"Bundle","type":"collection","entry":[...]}. '
+        "Return JSON only, without prose or markdown.\n\n"
+        "Rules:\n"
+        "1. Build one resource per distinct real-world instance; do not collapse "
+        "separate events merely because they share a resource type.\n"
+        "2. Use only the supplied fields for each resource type and omit unsupported "
+        "facts. Always include resourceType on every resource.\n"
+        "3. Represent fields using their declared FHIR datatype, never a bare string "
+        "where an object or array is required.\n"
+        "4. For coded concepts, use CodeableConcept.text. Add Coding.system and "
+        "Coding.code only when the narrative explicitly supplies an exact code; never "
+        "invent codes.\n"
+        "5. Give each entry a unique urn:uuid fullUrl and link resources using those "
+        "fullUrls. Do not invent external identifiers.\n"
+        "6. Use ISO 8601 dates and UCUM quantities when stated. Omit resources whose "
+        "required fields cannot be grounded.\n"
+        "7. Apply requested profiles only when the generated resource satisfies them.\n\n"
+        "Common datatype shapes:\n"
+        + DATATYPE_LEGEND
+    ),
+    user_template=(
+        "Requested profiles (may be empty): {profiles}\n\n"
+        "Allowed resource fields and datatypes:\n{field_reference}\n\n"
+        "Clinical narrative:\n{narrative}\n\n"
+        "Grounded extracted entities:\n{entities}"
     ),
 )
 
@@ -140,7 +154,8 @@ NARRATIVE_TO_DRAFT_AGENT: Final[PromptTemplate] = PromptTemplate(
 )
 
 PROMPT_SET: Final[dict[str, PromptTemplate]] = {
-    NARRATIVE_TO_BUNDLE.id: NARRATIVE_TO_BUNDLE,
+    NARRATIVE_TO_ENTITIES.id: NARRATIVE_TO_ENTITIES,
+    ENTITIES_TO_FHIR_BUNDLE.id: ENTITIES_TO_FHIR_BUNDLE,
     NARRATIVE_TO_DRAFT_AGENT.id: NARRATIVE_TO_DRAFT_AGENT,
 }
 
@@ -163,8 +178,9 @@ def prompt_set_fingerprint() -> str:
 
 
 __all__ = [
-    "NARRATIVE_TO_BUNDLE",
+    "ENTITIES_TO_FHIR_BUNDLE",
     "NARRATIVE_TO_DRAFT_AGENT",
+    "NARRATIVE_TO_ENTITIES",
     "PROMPT_SET",
     "PROMPT_SET_VERSION",
     "TERMINOLOGY_REFERENCE",

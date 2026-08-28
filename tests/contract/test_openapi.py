@@ -57,6 +57,7 @@ def test_operation_ids_are_unique_and_derived_from_the_route(app: FastAPI) -> No
 
     assert len(ids) == len(set(ids))
     assert "post_validate" in ids
+    assert "post_NAR2FHIR" in ids
     assert "post_terminology_validate_code" in ids
     # No FastAPI-style name mangling, which churns when a handler is renamed.
     assert not any("__" in str(identifier) for identifier in ids)

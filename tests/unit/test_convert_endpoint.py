@@ -1,4 +1,4 @@
-"""``POST /v1/convert`` and ``POST /v1/llm/probe``.
+"""``POST /v1/NAR2FHIR`` and ``POST /v1/llm/probe``.
 
 The gateway is scripted here (``FakeLlmGateway``): the point is what the endpoint
 does with the model's output, above all that it runs it through the real cascade
@@ -16,6 +16,26 @@ from fhirbridge.domain.errors import EgressBlockedError, LlmSchemaViolationError
 from tests.fakes import FakeLlmGateway
 from tests.helpers import OBSERVATION
 
+EXTRACTED = {
+    "entities": [
+        {
+            "resourceType": "Observation",
+            "keyword": "valueQuantity",
+            "value": "72 beats/minute",
+        }
+    ]
+}
+GENERATED_BUNDLE = {
+    "resourceType": "Bundle",
+    "type": "collection",
+    "entry": [{"fullUrl": "urn:uuid:obs-1", "resource": OBSERVATION}],
+}
+
+
+def nar2fhir_gateway() -> FakeLlmGateway:
+    return FakeLlmGateway(resources=[EXTRACTED, GENERATED_BUNDLE])
+
+
 BYOK_HEADERS = {
     "X-LLM-Provider": "openrouter",
     "X-LLM-Model": "openai/gpt-4o-mini",
@@ -28,35 +48,44 @@ class TestConvert:
     async def test_the_generated_bundle_is_run_through_the_cascade(
         self, app: FastAPI, client: httpx.AsyncClient, all_dependencies_healthy: None
     ) -> None:
-        gateway = FakeLlmGateway(resource=dict(OBSERVATION))
+        gateway = nar2fhir_gateway()
         app.dependency_overrides[get_llm_gateway] = lambda: gateway
 
-        response = await client.post("/v1/convert", json={"text": "HR 72"}, headers=BYOK_HEADERS)
+        response = await client.post("/v1/NAR2FHIR", json={"text": "HR 72"}, headers=BYOK_HEADERS)
 
         assert response.status_code == 200
         body = response.json()
-        assert body["bundle"]["resourceType"] == "Observation"
-        assert body["report"]["resource_type"] == "Observation"
+        assert body["bundle"]["resourceType"] == "Bundle"
+        assert body["report"]["resource_type"] == "Bundle"
         # The output was actually generated and actually measured.
-        assert gateway.complete_calls
+        assert len(gateway.complete_calls) == 2
         assert body["report"]["layers"], "the cascade did not run over the generated output"
 
     async def test_it_stamps_the_generation_provenance(
         self, app: FastAPI, client: httpx.AsyncClient, all_dependencies_healthy: None
     ) -> None:
         """A validate-only report leaves model/prompt_set empty; a conversion must not."""
-        gateway = FakeLlmGateway(resource=dict(OBSERVATION))
+        gateway = nar2fhir_gateway()
         app.dependency_overrides[get_llm_gateway] = lambda: gateway
 
         body = (
-            await client.post("/v1/convert", json={"text": "HR 72"}, headers=BYOK_HEADERS)
+            await client.post("/v1/NAR2FHIR", json={"text": "HR 72"}, headers=BYOK_HEADERS)
         ).json()
 
         assert body["conversion_id"].startswith("cnv_")
         assert body["report"]["conversion_id"] == body["conversion_id"]
-        assert body["report"]["versions"]["model"] == {"convert": gateway.model}
+        assert body["report"]["versions"]["model"] == {
+            "nar2fhir_extract": gateway.model,
+            "nar2fhir_generate": gateway.model,
+        }
         assert body["report"]["versions"]["prompt_set"]
         assert body["llm"]["model"] == gateway.model
+        assert body["llm"]["usage"] == {
+            "completion_tokens": 40,
+            "prompt_tokens": 20,
+            "total_tokens": 60,
+        }
+        assert body["llm"]["latency_ms"] == 10
         assert body["llm"]["qualification_tier"] == "silver"
 
     async def test_it_requires_the_conversions_write_scope(
@@ -65,11 +94,9 @@ class TestConvert:
         app.dependency_overrides[get_principal] = lambda: Principal(
             tenant_id="ten_x", actor_type="api_key", actor_id="key_x", scopes=frozenset()
         )
-        app.dependency_overrides[get_llm_gateway] = lambda: FakeLlmGateway(
-            resource=dict(OBSERVATION)
-        )
+        app.dependency_overrides[get_llm_gateway] = nar2fhir_gateway
 
-        response = await client.post("/v1/convert", json={"text": "x"}, headers=BYOK_HEADERS)
+        response = await client.post("/v1/NAR2FHIR", json={"text": "x"}, headers=BYOK_HEADERS)
 
         assert response.status_code == 403
 
@@ -77,7 +104,7 @@ class TestConvert:
         self, client: httpx.AsyncClient
     ) -> None:
         response = await client.post(
-            "/v1/convert",
+            "/v1/NAR2FHIR",
             json={"text": "x"},
             headers={"X-LLM-Model": "openai/gpt-4o-mini"},
         )
@@ -94,7 +121,7 @@ class TestConvert:
         gateway = FakeLlmGateway(error=EgressBlockedError("blocked", safe_context={"host": "x"}))
         app.dependency_overrides[get_llm_gateway] = lambda: gateway
 
-        response = await client.post("/v1/convert", json={"text": "x"}, headers=BYOK_HEADERS)
+        response = await client.post("/v1/NAR2FHIR", json={"text": "x"}, headers=BYOK_HEADERS)
 
         assert response.status_code == 451
 
@@ -104,7 +131,7 @@ class TestConvert:
         gateway = FakeLlmGateway(error=LlmSchemaViolationError("not an object"))
         app.dependency_overrides[get_llm_gateway] = lambda: gateway
 
-        response = await client.post("/v1/convert", json={"text": "x"}, headers=BYOK_HEADERS)
+        response = await client.post("/v1/NAR2FHIR", json={"text": "x"}, headers=BYOK_HEADERS)
 
         assert response.status_code == 422
 
@@ -116,10 +143,21 @@ class TestConvert:
         secret_note = "PATIENT-NAME-DO-NOT-LEAK"
 
         response = await client.post(
-            "/v1/convert", json={"text": secret_note}, headers=BYOK_HEADERS
+            "/v1/NAR2FHIR", json={"text": secret_note}, headers=BYOK_HEADERS
         )
 
         assert secret_note not in response.text
+
+    async def test_the_old_convert_route_is_a_compatibility_alias(
+        self, app: FastAPI, client: httpx.AsyncClient, all_dependencies_healthy: None
+    ) -> None:
+        gateway = nar2fhir_gateway()
+        app.dependency_overrides[get_llm_gateway] = lambda: gateway
+
+        response = await client.post("/v1/convert", json={"text": "HR 72"}, headers=BYOK_HEADERS)
+
+        assert response.status_code == 200
+        assert response.json()["bundle"]["resourceType"] == "Bundle"
 
 
 class TestProbe:

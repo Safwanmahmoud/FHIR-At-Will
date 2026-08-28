@@ -51,7 +51,7 @@ and budget gates.
 | Profile and invariant validation with the HL7 validator | Implemented |
 | Terminology validation and ConceptMap translation | Implemented |
 | Clinical plausibility rules | Implemented |
-| BYOK narrative-to-FHIR conversion (`/v1/convert`, single-pass) | Implemented |
+| Grounded BYOK narrative-to-FHIR conversion (`/v1/NAR2FHIR`, two-stage) | Implemented |
 | BYOK agentic narrative-to-FHIR (`/v1/craft`, tool-driven) | Implemented |
 | PHI-free LLM credential/connectivity probe | Implemented |
 | FHIR `OperationOutcome` and `$validate` facade | Implemented |
@@ -294,10 +294,12 @@ Request options:
 A bare FHIR resource is also accepted with
 `Content-Type: application/fhir+json`.
 
-## Convert narrative to FHIR
+## NAR2FHIR: convert narrative to FHIR
 
-`POST /v1/convert` is synchronous, stateless, and BYOK. It makes one model call,
-validates the generated Bundle, and returns:
+`POST /v1/NAR2FHIR` is synchronous, stateless, and BYOK. It first extracts
+catalog-constrained resource types, keys, and values, then makes a second call to
+assemble those grounded facts into typed FHIR structures. It validates the generated
+Bundle and returns:
 
 - `bundle` — the generated FHIR R4 Bundle;
 - `report` — the full validation result;
@@ -339,7 +341,7 @@ Example:
 
 ```python
 response = httpx.post(
-    f"{base_url}/v1/convert",
+    f"{base_url}/v1/NAR2FHIR",
     headers={
         "Authorization": f"Bearer {api_key}",
         "X-LLM-Provider": "openrouter",
@@ -386,7 +388,7 @@ the same L1–L5 cascade as every other path. Tool gates substantially constrain
 edits, while the final report remains authoritative for whole-Bundle and profile
 conformance.
 
-It uses the same BYOK `X-LLM-*` headers and `conversions:write` scope as `/v1/convert`,
+It uses the same BYOK `X-LLM-*` headers and `conversions:write` scope as `/v1/NAR2FHIR`,
 but **the model must support tool calling** (on OpenRouter, `supported_parameters`
 includes `tools`). The response adds:
 
@@ -398,7 +400,7 @@ includes `tools`). The response adds:
 - `toolset_version` and `llm` — provenance across every model call the agent made.
 
 The loop is bounded by `MAX_AGENT_ITERATIONS` (default `24`) and the same
-`MAX_COST_USD_PER_CONVERSION` budget as single-pass conversion.
+`MAX_COST_USD_PER_CONVERSION` budget as NAR2FHIR conversion.
 
 ```python
 response = httpx.post(
@@ -427,7 +429,7 @@ for step in result["trace"]:
     print(step.get("tool"), "ok" if step.get("ok") else step.get("error"))
 ```
 
-`/v1/convert` remains available as the single-shot path for models without tool calling.
+`/v1/NAR2FHIR` is the non-agentic path for models without tool calling.
 For interactive clients, `POST /v1/craft/stream` accepts the same request and headers but
 returns newline-delimited JSON events. `started` and `draft` events contain immutable
 snapshots of the evolving Bundle, `tool` events identify the active operation, and the
@@ -462,7 +464,7 @@ default for both craft endpoints and the playground.
 | `GET` | `/v1/igs` | Preloaded implementation guides |
 | `POST` | `/v1/validate` | Structured validation report |
 | `POST` | `/v1/validate/outcome` | Validation as `OperationOutcome` |
-| `POST` | `/v1/convert` | Single-pass BYOK narrative conversion and validation |
+| `POST` | `/v1/NAR2FHIR` | Two-stage grounded BYOK narrative conversion and validation |
 | `POST` | `/v1/craft` | Agentic BYOK narrative conversion via validated tools |
 | `POST` | `/v1/craft/stream` | Live NDJSON tool activity, draft snapshots, and final craft result |
 | `POST` | `/v1/llm/probe` | PHI-free provider probe |
@@ -471,7 +473,7 @@ default for both craft endpoints and the playground.
 | `POST` | `/v1/terminology/map` | ConceptMap `$translate` |
 | `POST` | `/fhir/R4/$validate` | FHIR-native validation operation |
 
-`/v1/convert`, `/v1/craft`, `/v1/craft/stream`, and `/v1/llm/probe` require the
+`/v1/NAR2FHIR`, `/v1/craft`, `/v1/craft/stream`, and `/v1/llm/probe` require the
 `conversions:write` scope.
 
 HL7 v2, C-CDA, and tabular conversion stubs return `501`, as do the FHIR facade

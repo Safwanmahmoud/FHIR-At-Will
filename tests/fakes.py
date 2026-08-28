@@ -206,6 +206,7 @@ class FakeLlmGateway:
     """
 
     resource: dict[str, Any] = field(default_factory=dict)
+    resources: list[dict[str, Any]] = field(default_factory=list)
     model: str = "openrouter/openai/gpt-4o-mini"
     tier: QualificationTier = QualificationTier.SILVER
     error: BaseException | None = None
@@ -249,8 +250,10 @@ class FakeLlmGateway:
         self.complete_calls.append((system_prompt, user_prompt))
         if self.error is not None:
             raise self.error
+        call_index = len(self.complete_calls) - 1
+        resource = self.resources[call_index] if self.resources else self.resource
         return LlmResult(
-            resource=self.resource,
+            resource=resource,
             model=self.model,
             usage={"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
             cost_usd=Decimal("0.0001"),

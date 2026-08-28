@@ -1,14 +1,14 @@
 """``POST /v1/craft`` — agentic narrative-to-FHIR (AGENTS.md 7, principle 2.3).
 
-Where ``/v1/convert`` asks a model for a whole Bundle in one shot and then scores
-it, ``/v1/craft`` gives the model a set of deterministic tools and lets it build
-the record step by step. Each tool validates its own edit against the typed
+Where ``/v1/NAR2FHIR`` uses a grounded extraction and assembly pipeline,
+``/v1/craft`` gives the model deterministic tools and lets it build the record
+step by step. Each tool validates its own edit against the typed
 models and the terminology server before committing, so the draft can never enter
 a non-conformant state — the model chooses the facts, the tools guarantee the
 FHIR. The assembled bundle is then run through the same L1-L5 cascade as every
 other path, so the response is a report as much as a conversion.
 
-BYOK and ``conversions:write`` like ``/v1/convert``: the loop spends the caller's
+BYOK and ``conversions:write`` like ``/v1/NAR2FHIR``: the loop spends the caller's
 money across several model calls, bounded by ``MAX_AGENT_ITERATIONS`` and
 ``MAX_COST_USD_PER_CONVERSION``.
 """

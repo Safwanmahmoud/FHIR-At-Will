@@ -69,7 +69,7 @@ class ValidateRequest(BaseModel):
 
 
 class ConvertRequest(BaseModel):
-    """Body of ``POST /v1/convert``.
+    """Body of ``POST /v1/NAR2FHIR``.
 
     The clinical narrative is sent in the body, never a query parameter, because
     it is PHI (principle 2.6). The generated bundle is validated before it is
@@ -161,14 +161,15 @@ class CraftToolCall(BaseModel):
 
 
 class LlmCallInfo(BaseModel):
-    """Provenance for one model call. No prompt or completion content (principle 2.6)."""
+    """Aggregate model-call provenance. No prompt or completion content (principle 2.6)."""
 
     model_config = ConfigDict(extra="forbid")
 
     provider: str
-    model: str = Field(description="The model id the provider reported answering with.")
+    model: str = Field(description="The model id reported by the final generation call.")
     usage: dict[str, int] = Field(
-        default_factory=dict, description="Token counts reported by the provider, when available."
+        default_factory=dict,
+        description="Token counts aggregated across the endpoint's calls, when available.",
     )
     cost_usd: float | None = Field(
         default=None, description="Provider-reported cost of this call, when pricing is known."
@@ -178,7 +179,7 @@ class LlmCallInfo(BaseModel):
 
 
 class ConvertResponse(BaseModel):
-    """Body of ``POST /v1/convert``."""
+    """Body of ``POST /v1/NAR2FHIR``."""
 
     model_config = ConfigDict(extra="forbid")
 

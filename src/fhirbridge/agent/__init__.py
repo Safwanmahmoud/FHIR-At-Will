@@ -1,7 +1,7 @@
 """The tool-driven narrative-to-FHIR agent (``POST /v1/craft``).
 
-Where ``/v1/convert`` asks a model for a whole Bundle in one shot and then
-scores it, this package inverts the trust: the model never emits FHIR directly.
+Where ``/v1/NAR2FHIR`` uses a grounded extraction and assembly pipeline, this
+package inverts the trust: the model never emits FHIR directly.
 It drives a :class:`~fhirbridge.agent.draft.DraftState` through a fixed set of
 deterministic tools (:mod:`fhirbridge.agent.tools`), each of which re-validates
 its change against the typed models and the terminology server and refuses to
