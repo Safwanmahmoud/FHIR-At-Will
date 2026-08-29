@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from scripts.issue_api_key import issue_key
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -9,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from fhirbridge.api.auth import authenticate_api_key
 from fhirbridge.storage.models import ApiKey, Tenant
 from fhirbridge.storage.session import privileged_session, tenant_session
+
+pytestmark = pytest.mark.integration
 
 
 async def test_issues_an_authenticating_key_for_an_existing_tenant(

@@ -57,8 +57,7 @@ NARRATIVE_TO_ENTITIES: Final[PromptTemplate] = PromptTemplate(
         "Use each description to choose the resource whose purpose matches the fact. "
         "Choose the most specific allowed key. Never infer missing facts, return FHIR "
         "paths, or emit administrative keys such as resourceType, id, meta, or text.\n\n"
-        "FHIR R4 resource catalog with observed keys:\n"
-        + resource_catalog_text()
+        "FHIR R4 resource catalog with observed keys:\n" + resource_catalog_text()
     ),
     user_template=(
         "Extract grounded FHIR entities from this clinical narrative.\n\n"
@@ -88,8 +87,7 @@ ENTITIES_TO_FHIR_BUNDLE: Final[PromptTemplate] = PromptTemplate(
         "6. Use ISO 8601 dates and UCUM quantities when stated. Omit resources whose "
         "required fields cannot be grounded.\n"
         "7. Apply requested profiles only when the generated resource satisfies them.\n\n"
-        "Common datatype shapes:\n"
-        + DATATYPE_LEGEND
+        "Common datatype shapes:\n" + DATATYPE_LEGEND
     ),
     user_template=(
         "Requested profiles (may be empty): {profiles}\n\n"

@@ -107,4 +107,3 @@ async def test_stream_can_explicitly_skip_validation_for_comparison_only_runs(
     assert complete["validated"] is False
     assert complete["report"] is None
     assert any(event.get("phase") == "validation_skipped" for event in events)
-

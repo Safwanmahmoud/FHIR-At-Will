@@ -13,6 +13,10 @@ FHIR at Will is a verification-first API for FHIR R4. It validates existing FHIR
 resources and can turn clinical narrative into a FHIR Bundle using a caller-supplied
 model and provider key.
 
+The public project and product are named **FHIR at Will**. The installable Python
+package, import namespace, API title, and container service retain the shorter
+technical name **`fhirbridge`**.
+
 The generated Bundle is never presented as trusted output. It is returned beside a
 structured report covering conformance, terminology, clinical plausibility, skipped
 checks, version provenance, and the final routing decision.
@@ -239,19 +243,25 @@ observation = {
         "div": '<div xmlns="http://www.w3.org/1999/xhtml">Heart rate 72/min</div>',
     },
     "status": "final",
-    "category": [{
-        "coding": [{
-            "system": "http://terminology.hl7.org/CodeSystem/observation-category",
-            "code": "vital-signs",
-            "display": "Vital Signs",
-        }]
-    }],
+    "category": [
+        {
+            "coding": [
+                {
+                    "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                    "code": "vital-signs",
+                    "display": "Vital Signs",
+                }
+            ]
+        }
+    ],
     "code": {
-        "coding": [{
-            "system": "http://loinc.org",
-            "code": "8867-4",
-            "display": "Heart rate",
-        }]
+        "coding": [
+            {
+                "system": "http://loinc.org",
+                "code": "8867-4",
+                "display": "Heart rate",
+            }
+        ]
     },
     "subject": {"reference": "Patient/example"},
     "performer": [{"reference": "Practitioner/example"}],
@@ -273,8 +283,8 @@ response = httpx.post(
 response.raise_for_status()
 
 report = response.json()
-print(report["status"])       # auto
-print(report["conformant"])   # True
+print(report["status"])  # auto
+print(report["conformant"])  # True
 for layer in report["layers"]:
     print(layer["layer_number"], layer["layer"], layer["status"])
 ```
@@ -360,7 +370,7 @@ response = httpx.post(
 response.raise_for_status()
 
 result = response.json()
-print(result["report"]["status"])       # inspect before using result["bundle"]
+print(result["report"]["status"])  # inspect before using result["bundle"]
 print(result["report"]["conformant"])
 print(result["llm"]["model"], result["llm"]["cost_usd"])
 ```
@@ -551,7 +561,7 @@ licensing, provider agreements, incident response, and all infrastructure compli
 Python `3.12` and [`uv`](https://docs.astral.sh/uv/) are the supported path:
 
 ```bash
-uv sync
+uv sync --group dev
 uv run pytest -q -m "not integration"
 uv run ruff check .
 uv run ruff format --check .
@@ -609,7 +619,8 @@ outputs are persisted in the file.
 
 ## Contributing
 
-Keep changes small and verification-first:
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a change. Keep changes
+small and verification-first:
 
 1. add or update tests;
 2. run formatting, lint, types, and relevant test suites;
@@ -617,6 +628,10 @@ Keep changes small and verification-first:
 4. never log resource bodies, issue messages, prompts, or credentials; and
 5. never turn an unavailable verifier into a successful response.
 
+Community participation follows the [Code of Conduct](CODE_OF_CONDUCT.md).
+Report vulnerabilities privately according to [SECURITY.md](SECURITY.md).
+
 ## License
 
-[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)
+Licensed under the [Apache License 2.0](LICENSE). Third-party standards,
+terminology, and asset notices are documented in [NOTICE](NOTICE).

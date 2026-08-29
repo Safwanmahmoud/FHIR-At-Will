@@ -33,7 +33,7 @@ VALIDATION_REPORT_SCHEMA_VERSION: Final[str] = "v1"
 """Version of the validation report envelope returned by ``POST /v1/validate``."""
 
 SUPPORTED_FHIR_VERSIONS: Final[tuple[str, ...]] = ("4.0.1",)
-"""FHIR versions this build accepts. R4 only; see docs/adr/0004."""
+"""FHIR versions this build accepts. R4 only; see docs/adr/0004-r4-typed-models.md."""
 
 TYPED_MODEL_FHIR_VERSION: Final[str] = "4.3.0"
 """FHIR version of the ``fhir.resources`` typed models used for L1.
@@ -41,7 +41,7 @@ TYPED_MODEL_FHIR_VERSION: Final[str] = "4.3.0"
 ``fhir.resources`` 8.x ships R4B (4.3.0) and R5, but not R4 (4.0.1). L1 uses the
 R4B models constrained to the R4 resource-type allowlist; L2 (the HAPI validator
 sidecar, run with ``-version 4.0.1``) is the authoritative R4 conformance check.
-See docs/adr/0004 and OPEN_QUESTIONS.md#Q1.
+See docs/adr/0004-r4-typed-models.md and OPEN_QUESTIONS.md#Q1.
 """
 
 __all__ = [

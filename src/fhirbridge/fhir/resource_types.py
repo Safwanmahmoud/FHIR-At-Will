@@ -14,7 +14,7 @@ So L1 does two things rather than one:
    could not type-check the resource and defer to L2 — the HAPI validator
    sidecar, which runs with ``-version 4.0.1`` and is authoritative.
 
-See docs/adr/0004 and OPEN_QUESTIONS.md#Q1.
+See docs/adr/0004-r4-typed-models.md and OPEN_QUESTIONS.md#Q1.
 """
 
 from __future__ import annotations

@@ -1,7 +1,7 @@
 """Request and response schemas for the M0/M1 endpoints.
 
 Every field carries a description: these models are the OpenAPI document, which
-is the contract the generated SDKs and the reviewer UI are built from.
+is the contract clients use to validate requests and responses.
 """
 
 from __future__ import annotations
@@ -102,6 +102,8 @@ class ConvertRequest(BaseModel):
         default=500,
         description="Cap on distinct $validate-code calls for the L3 layer.",
     )
+
+
 class CraftRequest(BaseModel):
     """Body of ``POST /v1/craft``.
 

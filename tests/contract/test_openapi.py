@@ -1,7 +1,6 @@
-"""The OpenAPI document is a committed contract (AGENTS.md 16.3).
+"""The OpenAPI document is a committed contract (AGENTS.md).
 
-The snapshot is regenerated with ``just openapi`` and the diff must be reviewed:
-the SDKs and the reviewer UI are generated from this file, so an accidental
+The snapshot diff must be reviewed whenever the API changes; an accidental
 rename is a breaking change for every client.
 """
 
@@ -32,8 +31,8 @@ def test_snapshot_matches(app: FastAPI) -> None:
         pytest.fail(f"wrote a new snapshot to {SNAPSHOT.name}; review and commit it")
 
     assert current == SNAPSHOT.read_text(encoding="utf-8"), (
-        "the OpenAPI contract changed. Review the diff, then run `just openapi` to "
-        "accept it and regenerate the SDKs."
+        "the OpenAPI contract changed. Review the diff, then run "
+        "`uv run python scripts/export_openapi.py` and commit the snapshot."
     )
 
 

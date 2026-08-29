@@ -1,0 +1,42 @@
+FHIR at Will
+Copyright 2026 FHIR at Will contributors
+
+This product includes software developed by the FHIR at Will contributors and
+is licensed under the Apache License, Version 2.0.
+
+The FHIR at Will logo in assets/fhir-at-will-logo.png is original project
+artwork and is distributed with this project under the Apache License,
+Version 2.0. The license does not grant trademark rights.
+
+Third-party standards, terminology, and software
+-------------------------------------------------
+
+This project interoperates with or downloads third-party material at build or
+runtime. Those materials remain subject to their own terms and are not
+relicensed by this project's Apache-2.0 license.
+
+* HL7 FHIR, the HL7 FHIR Validator, and published implementation guides,
+  including US Core, are works of Health Level Seven International. See
+  https://hl7.org/fhir/license.html and the license packaged with each
+  implementation guide.
+* SNOMED CT is owned by SNOMED International and use may require an affiliate
+  license. See https://www.snomed.org/get-snomed.
+* LOINC is maintained by Regenstrief Institute and is subject to the LOINC
+  license. See https://loinc.org/license/.
+* RxNorm is produced by the U.S. National Library of Medicine. See
+  https://www.nlm.nih.gov/research/umls/rxnorm/docs/termsofservice.html.
+* UCUM is maintained by the Regenstrief Institute. See
+  https://ucum.org/trac/wiki/TermsOfUse.
+
+The small code and display strings committed in tests, examples, validation
+rules, and the terminology reference prompt are interoperability examples, not
+complete terminology distributions. Operators are responsible for obtaining
+the rights required by their jurisdiction and deployment.
+
+Python and container dependencies are resolved from pyproject.toml, uv.lock,
+and the Dockerfiles. Their licenses are available from their respective source
+distributions and container image metadata.
+
+"FHIR" is a registered trademark of Health Level Seven International. This
+project is not affiliated with or endorsed by HL7 International, SNOMED
+International, Regenstrief Institute, or the U.S. National Library of Medicine.

@@ -214,9 +214,7 @@ class TestTerminologySearch:
             {"system": LOINC, "code": HEART_RATE, "display": "Heart rate"}
         ]
 
-    async def test_a_search_requires_a_system_or_value_set(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_a_search_requires_a_system_or_value_set(self, client: httpx.AsyncClient) -> None:
         response = await client.post(
             "/v1/terminology/search",
             json={"query": "heart rate"},

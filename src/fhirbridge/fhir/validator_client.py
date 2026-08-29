@@ -13,7 +13,7 @@ The sidecar's ``POST /loadIG`` endpoint was removed in org.hl7.fhir.core 6.6.0,
 so IGs are baked in at container build time and passed with ``-ig`` at startup
 instead. That is also better for reproducibility: a validator whose loaded IG
 set can be mutated at runtime cannot support the byte-identical output claim in
-principle 2.8. See docs/adr/0003 and OPEN_QUESTIONS.md#Q2.
+principle 2.8. See docs/adr/0003-immutable-validator-igs.md and OPEN_QUESTIONS.md#Q2.
 """
 
 from __future__ import annotations

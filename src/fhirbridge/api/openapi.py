@@ -1,11 +1,10 @@
 """OpenAPI document customization.
 
 The document is a committed contract: ``tests/contract`` snapshots it and CI
-fails on an unreviewed diff, and the Python and TypeScript SDKs are generated
-from it. So it must be **stable** — the same code must produce byte-identical
-output on every run. That is why operation ids are derived from the route rather
-than from FastAPI's default function-name mangling, and why nothing here embeds
-a timestamp, a hostname or a random value.
+fails on an unreviewed diff. It must be **stable** — the same code must produce
+byte-identical output on every run. That is why operation ids are derived from
+the route rather than from FastAPI's default function-name mangling, and why
+nothing here embeds a timestamp, a hostname or a random value.
 """
 
 from __future__ import annotations
@@ -22,8 +21,9 @@ BEARER_SCHEME: Final[str] = "bearerAuth"
 
 DESCRIPTION: Final[str] = """
 Convert unstructured clinical source material into validated, provenance-tagged
-FHIR R4 resources, with a mandatory human-review stage before anything is
-finalized.
+FHIR R4 resources and return each generated result with a verification report
+and routing decision. Human review workflows are planned but are not included
+in this alpha release.
 
 **What this is not:** not a medical device, not clinical decision support, and not
 a FHIR repository. Nothing is inferred beyond what the source text asserts, and no
@@ -118,7 +118,10 @@ def build_openapi(app: FastAPI) -> dict[str, Any]:
         routes=app.routes,
         tags=TAGS,
         license_info={"name": "Apache-2.0", "identifier": "Apache-2.0"},
-        contact={"name": "fhirbridge", "url": "https://github.com/fhirbridge/fhirbridge"},
+        contact={
+            "name": "FHIR at Will",
+            "url": "https://github.com/Safwanmahmoud/FHIR-It-Will",
+        },
     )
 
     components = schema.setdefault("components", {})

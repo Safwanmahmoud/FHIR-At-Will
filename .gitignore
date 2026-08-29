@@ -16,11 +16,18 @@ venv/
 .coverage.*
 coverage.xml
 htmlcov/
+.ipynb_checkpoints/
 
 # Local configuration. Never commit a real one: it is where credentials land.
 .env
 .env.*
 !.env.example
+credentials.json
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
 
 # Node / reviewer UI (M4)
 node_modules/

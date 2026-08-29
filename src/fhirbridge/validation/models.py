@@ -192,7 +192,10 @@ class ReportVersions(BaseModel):
     report_schema: str
     fhir: str
     typed_models: str = Field(
-        description="FHIR version of the fhir.resources models used for L1 (see docs/adr/0004)."
+        description=(
+            "FHIR version of the fhir.resources models used for L1 "
+            "(see docs/adr/0004-r4-typed-models.md)."
+        )
     )
     prompt_set: str | None = None
     ig: list[str] = Field(default_factory=list)

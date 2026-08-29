@@ -22,7 +22,7 @@ dependencies = [
   "pydantic==2.13.4",
   "pydantic-settings==2.15.0",
   "python-multipart==0.0.32",
-  # FHIR typed models. See docs/adr/0004 for the R4-vs-R4B module decision.
+  # FHIR typed models. See docs/adr/0004-r4-typed-models.md for the R4/R4B decision.
   "fhir.resources==8.3.0",
   # Persistence
   "sqlalchemy[asyncio]==2.0.52",
@@ -52,10 +52,10 @@ dependencies = [
 ocr = ["pytesseract==0.3.13"]
 
 [project.urls]
-Homepage = "https://github.com/fhirbridge/fhirbridge"
-Documentation = "https://github.com/fhirbridge/fhirbridge/tree/main/docs"
-Source = "https://github.com/fhirbridge/fhirbridge"
-Issues = "https://github.com/fhirbridge/fhirbridge/issues"
+Homepage = "https://github.com/Safwanmahmoud/FHIR-It-Will"
+Documentation = "https://github.com/Safwanmahmoud/FHIR-It-Will/tree/main/docs"
+Source = "https://github.com/Safwanmahmoud/FHIR-It-Will"
+Issues = "https://github.com/Safwanmahmoud/FHIR-It-Will/issues"
 
 [dependency-groups]
 dev = [

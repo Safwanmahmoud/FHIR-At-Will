@@ -6,7 +6,7 @@ append-only machinery every later table will reuse. The conversion, review,
 delivery and evaluation tables land with the milestones that read and write
 them, each with its own migration. Shipping 28 empty tables that no code touches
 would be untestable and would freeze a schema before its consumers exist. See
-docs/adr/0006.
+docs/adr/0006-milestone-storage.md.
 
 Immutability of ``audit_events`` is enforced by a database trigger, not by
 application discipline (AGENTS.md 8.2).

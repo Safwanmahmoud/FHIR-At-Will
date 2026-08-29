@@ -775,7 +775,7 @@
             "type": "object"
           },
           "typed_models": {
-            "description": "FHIR version of the fhir.resources models used for L1 (see docs/adr/0004).",
+            "description": "FHIR version of the fhir.resources models used for L1 (see docs/adr/0004-r4-typed-models.md).",
             "title": "Typed Models",
             "type": "string"
           },
@@ -1664,10 +1664,10 @@
   },
   "info": {
     "contact": {
-      "name": "fhirbridge",
-      "url": "https://github.com/fhirbridge/fhirbridge"
+      "name": "FHIR at Will",
+      "url": "https://github.com/Safwanmahmoud/FHIR-It-Will"
     },
-    "description": "Convert unstructured clinical source material into validated, provenance-tagged\nFHIR R4 resources, with a mandatory human-review stage before anything is\nfinalized.\n\n**What this is not:** not a medical device, not clinical decision support, and not\na FHIR repository. Nothing is inferred beyond what the source text asserts, and no\nendpoint writes to an external FHIR server without an explicit, separate call.\n\n**Fail-closed behaviour.** When the FHIR validator or the terminology server is\nunavailable, requests fail with `503` rather than returning an unverified result.\nAn unvalidated code and an unvalidated bundle are worse than no answer.\n\n**Errors.** Clinical and FHIR-semantic failures return an `OperationOutcome`\nwhose `issue.details.coding` carries a stable machine code from\n`https://fhirbridge.org/CodeSystem/errors`. Platform failures return\n`{\"error\": {\"code\", \"message\", \"trace_id\", \"details\"}}`. Fetch the full code\nlist from `GET /v1/error-codes`.\n\n**No PHI in URLs.** Every endpoint that accepts clinical content accepts it in a\nrequest body. There is no `GET` endpoint taking clinical text as a query\nparameter, and none will be added.",
+    "description": "Convert unstructured clinical source material into validated, provenance-tagged\nFHIR R4 resources and return each generated result with a verification report\nand routing decision. Human review workflows are planned but are not included\nin this alpha release.\n\n**What this is not:** not a medical device, not clinical decision support, and not\na FHIR repository. Nothing is inferred beyond what the source text asserts, and no\nendpoint writes to an external FHIR server without an explicit, separate call.\n\n**Fail-closed behaviour.** When the FHIR validator or the terminology server is\nunavailable, requests fail with `503` rather than returning an unverified result.\nAn unvalidated code and an unvalidated bundle are worse than no answer.\n\n**Errors.** Clinical and FHIR-semantic failures return an `OperationOutcome`\nwhose `issue.details.coding` carries a stable machine code from\n`https://fhirbridge.org/CodeSystem/errors`. Platform failures return\n`{\"error\": {\"code\", \"message\", \"trace_id\", \"details\"}}`. Fetch the full code\nlist from `GET /v1/error-codes`.\n\n**No PHI in URLs.** Every endpoint that accepts clinical content accepts it in a\nrequest body. There is no `GET` endpoint taking clinical text as a query\nparameter, and none will be added.",
     "license": {
       "identifier": "Apache-2.0",
       "name": "Apache-2.0"

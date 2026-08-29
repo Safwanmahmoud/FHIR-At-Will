@@ -1,4 +1,4 @@
-"""Exception handlers (AGENTS.md 12).
+"""Exception handlers.
 
 Domain errors render as a FHIR ``OperationOutcome``; platform errors render as
 ``{"error": {code, message, trace_id, details}}``.
@@ -42,7 +42,7 @@ from fhirbridge.observability.context import (
 
 logger = logging.getLogger(__name__)
 
-DOCS_BASE = "https://github.com/fhirbridge/fhirbridge/blob/main/docs"
+DOCS_BASE = "https://github.com/Safwanmahmoud/FHIR-It-Will/blob/main/docs"
 
 DOCUMENTATION: dict[ErrorCode, str] = {
     ErrorCode.LLM_CREDENTIALS_REQUIRED: f"{DOCS_BASE}/byok.md#supplying-credentials",

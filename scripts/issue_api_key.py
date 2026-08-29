@@ -93,9 +93,7 @@ async def issue_key(
                 existing = await session.scalar(select(Tenant).where(predicate))
             if existing is None:
                 selector = (
-                    f"slug {tenant_slug!r}"
-                    if tenant_slug is not None
-                    else f"id {tenant_id!r}"
+                    f"slug {tenant_slug!r}" if tenant_slug is not None else f"id {tenant_id!r}"
                 )
                 raise SystemExit(f"No tenant exists with {selector}. No API key was issued.")
             session.add(

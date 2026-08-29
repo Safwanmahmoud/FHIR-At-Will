@@ -1,0 +1,14 @@
+# FHIR at Will documentation
+
+- [Deployment](deployment.md)
+- [Bring-your-own-key and LLM egress](byok.md)
+- [Terminology setup and licensing](terminology-setup.md)
+- [Model compatibility](model-compatibility.md)
+- [API notes](api.md)
+- [Clinical safety boundaries](clinical-safety.md)
+- [Canonical namespaces](namespaces.md)
+- [Public release checklist](public-release-checklist.md)
+- [Architecture decisions](adr/)
+
+The running service exposes interactive OpenAPI documentation at `/docs`.
+Project-wide setup and examples remain in the root [README](../README.md).

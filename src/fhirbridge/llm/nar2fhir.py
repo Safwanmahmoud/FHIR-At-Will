@@ -65,16 +65,11 @@ RESOURCE_DESCRIPTIONS: Final[dict[str, str]] = {
         "An order or request for medication supply and instructions for administration."
     ),
     "Observation": "Measurements and simple assertions about a patient or other subject.",
-    "Organization": (
-        "A recognized grouping such as a company, institution, practice, or insurer."
-    ),
-    "Patient": (
-        "Demographics and administrative information about an individual receiving care."
-    ),
+    "Organization": ("A recognized grouping such as a company, institution, practice, or insurer."),
+    "Patient": ("Demographics and administrative information about an individual receiving care."),
     "Practitioner": "A person directly or indirectly involved in providing healthcare.",
     "PractitionerRole": (
-        "Roles, locations, specialties, and services a practitioner performs for an "
-        "organization."
+        "Roles, locations, specialties, and services a practitioner performs for an organization."
     ),
     "Procedure": "An action performed on or for a patient.",
     "Provenance": "Entities and processes involved in producing or influencing a resource.",
@@ -443,9 +438,7 @@ def parse_entities(payload: dict[str, Any]) -> list[dict[str, str]]:
             raise LlmSchemaViolationError(
                 "The extraction model returned a resource type or key outside the catalog."
             )
-        entities.append(
-            {"resourceType": resource_type, "keyword": keyword, "value": value}
-        )
+        entities.append({"resourceType": resource_type, "keyword": keyword, "value": value})
     return entities
 
 

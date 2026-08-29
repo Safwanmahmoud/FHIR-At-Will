@@ -1,0 +1,18 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Intentional fake secret fixtures in redaction tests"
+paths = [
+  '''tests/unit/test_redaction\.py''',
+  '''tests/security/test_no_secret_leaks\.py''',
+]
+
+[[allowlists]]
+description = "Explicitly fake provider-key values used by behavior tests"
+regexes = [
+  '''sk-would-be-leaked-on-the-wire''',
+  '''sk-abcdefghijklmnopqrstuvwxyz[0-9A-Za-z]*''',
+  '''sk-super-secret-terminology-token''',
+  '''sk-terminology-token-value''',
+]

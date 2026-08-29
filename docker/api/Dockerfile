@@ -37,7 +37,7 @@ FROM python:3.12-slim-bookworm AS runtime
 
 LABEL org.opencontainers.image.title="fhirbridge" \
       org.opencontainers.image.description="Validated, provenance-tagged FHIR R4 conversion service" \
-      org.opencontainers.image.source="https://github.com/fhirbridge/fhirbridge"
+      org.opencontainers.image.source="https://github.com/Safwanmahmoud/FHIR-It-Will"
 
 RUN groupadd --system --gid 10001 fhirbridge \
     && useradd --system --uid 10001 --gid fhirbridge --shell /usr/sbin/nologin \
