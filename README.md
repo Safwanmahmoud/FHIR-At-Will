@@ -140,6 +140,17 @@ on a private network. PostgreSQL migrations run as the database owner, while the
 runs as a separate least-privileged role. `/readyz` refuses readiness if row-level
 security does not apply to that role.
 
+## Deploy on Railway
+
+The repository includes a four-service Railway definition for the API, private
+validator sidecar, PostgreSQL, and Redis. See the
+[Railway template guide](docs/railway-template.md) for the generated-secret
+configuration, first API-key retrieval, sandbox safety boundary, and
+marketplace overview.
+
+The one-click marketplace button will be added here after the public template
+is published.
+
 ## Quick start with Docker
 
 ### Prerequisites

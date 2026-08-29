@@ -1,6 +1,7 @@
 # FHIR at Will documentation
 
 - [Deployment](deployment.md)
+- [Railway one-click template](railway-template.md)
 - [Bring-your-own-key and LLM egress](byok.md)
 - [Terminology setup and licensing](terminology-setup.md)
 - [Model compatibility](model-compatibility.md)
