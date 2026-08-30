@@ -8,6 +8,7 @@ hash: any edit to a prompt fails here until the author bumps both the hash and
 
 from __future__ import annotations
 
+from fhirbridge.llm.extraction_rules import extraction_rules_text
 from fhirbridge.llm.prompts import (
     NARRATIVE_TO_ENTITIES,
     PROMPT_SET,
@@ -15,7 +16,7 @@ from fhirbridge.llm.prompts import (
     prompt_set_fingerprint,
 )
 
-PINNED_FINGERPRINT = "baf6e460afb924d2a5a7799ace234ce70ce68900dc04f9c0d2df75d2f1d6a325"
+PINNED_FINGERPRINT = "bf5e8aaaf80767027b40fbd295a575a470bc8b97ce499b7053e805b9bbf4535c"
 
 
 def test_the_prompt_set_has_not_drifted_from_its_pinned_hash() -> None:
@@ -58,3 +59,25 @@ def test_extraction_forbids_identifying_detail_in_the_grouping_key() -> None:
 def test_no_generation_prompt_remains() -> None:
     """Bundle assembly is deterministic; a second model call would reintroduce drift."""
     assert len(PROMPT_SET) == 1
+
+
+def test_the_extraction_rule_pack_is_embedded() -> None:
+    """Rules live in their own module but must be pinned by this fingerprint."""
+    assert "Extraction rules" in NARRATIVE_TO_ENTITIES.system
+    assert extraction_rules_text() in NARRATIVE_TO_ENTITIES.system
+
+
+def test_every_prompt_is_ascii() -> None:
+    """Smart quotes and dashes tokenize unpredictably and creep in via copy-paste."""
+    for template in PROMPT_SET.values():
+        offenders = sorted({char for char in template.system if ord(char) > 127})
+        assert not offenders, f"{template.id} system prompt contains {offenders}"
+        offenders = sorted({char for char in template.user_template if ord(char) > 127})
+        assert not offenders, f"{template.id} user template contains {offenders}"
+
+
+def test_the_rules_come_before_the_catalog() -> None:
+    """The catalog is long; guidance buried after it is easy for a model to lose."""
+    system = NARRATIVE_TO_ENTITIES.system
+
+    assert system.index("Extraction rules") < system.index("FHIR R4 resource catalog")

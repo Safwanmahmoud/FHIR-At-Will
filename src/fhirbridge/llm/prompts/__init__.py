@@ -14,6 +14,7 @@ import hashlib
 from dataclasses import dataclass
 from typing import Final
 
+from fhirbridge.llm.extraction_rules import extraction_rules_text
 from fhirbridge.llm.nar2fhir import resource_catalog_text
 from fhirbridge.version import PROMPT_SET_VERSION
 
@@ -43,15 +44,15 @@ NARRATIVE_TO_ENTITIES: Final[PromptTemplate] = PromptTemplate(
         "`instance` identifies which single real-world thing a fact describes. Use a "
         "short slug of lowercase letters, digits, and hyphens, reused by every key "
         "belonging to that same thing, for example `patient-1`, `obs-blood-pressure`, "
-        "`obs-heart-rate`, `med-metformin`. Two facts share an `instance` only when one "
-        "resource would carry both. Give every distinct measurement, condition, "
-        "encounter, and medication its own `instance`. Name the kind of thing, never "
-        "the person: an `instance` must not contain a patient name, an identifier, a "
-        "date, or any other identifying detail.\n\n"
+        "`obs-heart-rate`, `med-metformin`. Name the kind of thing, never the person: an "
+        "`instance` must not contain a patient name, an identifier, a date, or any other "
+        "identifying detail.\n\n"
         "Create a separate item for every entity, even when items share a key or type. "
         "Use each description to choose the resource whose purpose matches the fact. "
         "Choose the most specific allowed key. Never infer missing facts, return FHIR "
         "paths, or emit administrative keys such as resourceType, id, meta, or text.\n\n"
+        "Extraction rules. These override the general guidance above where they "
+        "conflict:\n\n" + extraction_rules_text() + "\n\n"
         "FHIR R4 resource catalog with observed keys:\n" + resource_catalog_text()
     ),
     user_template=(

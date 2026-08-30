@@ -337,6 +337,27 @@ reproducible and auditable but is not evidence about the patient.
 There is no `profiles` field on the request. Assembly validates nothing, so it
 cannot honor a profile; pass profiles to `POST /v1/validate` instead.
 
+### Extraction rules
+
+Where the narrative's shape and FHIR's shape disagree, a reviewed rule pack in
+[`src/fhirbridge/llm/extraction_rules.py`](src/fhirbridge/llm/extraction_rules.py)
+tells the model what to do. Rules are rendered into the extraction prompt and pinned
+by the prompt fingerprint, so adding one means appending to `EXTRACTION_RULES` and
+bumping `PROMPT_SET_VERSION`.
+
+| Rule | Effect |
+|---|---|
+| An age is not a birth date | `62-year-old` becomes an `Age` Observation of `62 years`; `Patient.birthDate` is never computed from an age |
+| One measurement per value | `128/82 mmHg` becomes separate systolic and diastolic Observations |
+| Resolve dates only against a stated anchor | Relative dates resolve only when the narrative states the anchor, at the precision the phrase supports |
+| Never turn a denial or a relative's history into a diagnosis | A denied condition becomes `verificationStatus: refuted`; a family member's condition is dropped |
+| Split a medication phrase | `metformin` and `500 mg by mouth twice daily` land in separate elements |
+| One instance per real-world thing | Each distinct measurement, condition, encounter, and medication gets its own `instance` |
+
+A rule may not license a guess. Where a fact cannot be represented, the rule says to
+leave the source wording so coercion refuses it and `assembly` names the gap — a
+reported gap being a better outcome than a plausible fabrication.
+
 Submit the returned `bundle` separately to `POST /v1/validate` before trusting it.
 
 The service does not hold an LLM key. Supply invocation details on every request:

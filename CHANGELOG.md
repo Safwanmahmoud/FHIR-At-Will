@@ -17,6 +17,15 @@ semantic versioning after its first public release.
   validates nothing and so cannot honor a profile request.
 - Report every element NAR2FHIR dropped, inferred, wired, or found in conflict in
   a new PHI-free `assembly` list on the response.
+- Add a reviewed extraction rule pack (`fhirbridge.llm.extraction_rules`) rendered
+  into the extraction prompt and pinned by `prompt_set_fingerprint()`
+  (`PROMPT_SET_VERSION` `v5.1.0`). The initial six rules route a stated age to an
+  `Age` Observation rather than fabricating `Patient.birthDate`, split compound
+  readings such as `128/82 mmHg` into one Observation each, resolve relative dates
+  only against an anchor the narrative states, record a denied condition as
+  `verificationStatus: refuted` while suppressing a family member's history
+  entirely, split medication phrases into drug and dosing, and tighten `instance`
+  grouping.
 - Add the `machine-inferred` provenance tag for resources carrying a
   FHIR-required value that the source did not state.
 - Add authenticated terminology search.
