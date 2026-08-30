@@ -48,32 +48,14 @@ IMPLEMENTED_ENDPOINTS: list[str] = [
     "POST /v1/validate",
     "POST /v1/validate/outcome",
     "POST /v1/NAR2FHIR",
-    "POST /v1/craft",
-    "POST /v1/craft/stream",
-    "POST /v1/llm/probe",
-    "POST /v1/terminology/search",
-    "POST /v1/terminology/validate-code",
-    "POST /v1/terminology/map",
     "GET /fhir/R4/metadata",
-    "POST /fhir/R4/$validate",
 ]
 
 NOT_IMPLEMENTED_ENDPOINTS: list[str] = [
-    "POST /v1/documents (M3)",
-    "POST /v1/conversions (M3)",
-    "POST /v1/extract (M3)",
-    "POST /v1/assert (M3)",
-    "POST /v1/bind (M3)",
-    "POST /v1/assemble (M3)",
-    "POST /v1/verify (M3)",
-    "POST /v1/repair (M3)",
     "POST /v1/normalize (M3)",
     "POST /v1/reviews (M4)",
     "POST /v1/llm/qualify (M5)",
     "POST /v1/deliveries (M6)",
-    "POST /v1/translate/hl7v2 (out of scope for v1)",
-    "POST /v1/translate/cda (out of scope for v1)",
-    "POST /v1/translate/tabular (out of scope for v1)",
 ]
 
 

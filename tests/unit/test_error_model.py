@@ -84,18 +84,18 @@ class TestEnvelopes:
     async def test_a_domain_error_renders_as_an_operation_outcome(
         self, client: httpx.AsyncClient
     ) -> None:
-        response = await client.post("/fhir/R4/$validate", json={"no": "resourceType"})
+        response = await client.post("/v1/NAR2FHIR", json={"text": "synthetic"})
 
         assert response.headers["content-type"].startswith("application/fhir+json")
         body = response.json()
         assert body["resourceType"] == "OperationOutcome"
         assert body["issue"][0]["severity"] == "error"
-        assert body["issue"][0]["code"] == "structure"
+        assert body["issue"][0]["code"] == "security"
 
     async def test_a_platform_error_renders_as_the_json_envelope(
         self, client: httpx.AsyncClient
     ) -> None:
-        response = await client.post("/v1/translate/hl7v2", json={})
+        response = await client.post("/v1/nope", json={})
 
         assert response.headers["content-type"].startswith("application/json")
         error = response.json()["error"]

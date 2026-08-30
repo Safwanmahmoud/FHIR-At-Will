@@ -17,7 +17,6 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
-from fhirbridge.config import QualificationTier
 from fhirbridge.domain.errors import (
     DomainError,
     ErrorCode,
@@ -29,7 +28,7 @@ from fhirbridge.fhir.validator_client import (
     ValidatorIssue,
     ValidatorOutcome,
 )
-from fhirbridge.llm.gateway import LlmProbeResult, LlmResult, LlmToolTurn
+from fhirbridge.llm.gateway import LlmResult
 from fhirbridge.llm.invocation import LlmInvocation
 from fhirbridge.terminology.models import (
     Coding,
@@ -208,35 +207,11 @@ class FakeLlmGateway:
     resource: dict[str, Any] = field(default_factory=dict)
     resources: list[dict[str, Any]] = field(default_factory=list)
     model: str = "openrouter/openai/gpt-4o-mini"
-    tier: QualificationTier = QualificationTier.SILVER
     error: BaseException | None = None
-    probe_error: BaseException | None = None
     complete_calls: list[tuple[str, str]] = field(default_factory=list)
-    probe_calls: list[LlmInvocation] = field(default_factory=list)
-    tool_turns: list[LlmToolTurn] = field(default_factory=list)
-    tool_calls: list[list[dict[str, Any]]] = field(default_factory=list)
 
     def authorize(self, invocation: LlmInvocation, *, sending_phi: bool) -> None:
         del invocation, sending_phi
-
-    async def complete_with_tools(
-        self,
-        invocation: LlmInvocation,
-        *,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]],
-        tool_choice: str = "auto",
-        max_tokens: int = 4096,
-        authorize: bool = True,
-    ) -> LlmToolTurn:
-        del invocation, tools, tool_choice, max_tokens, authorize
-        self.tool_calls.append(messages)
-        if self.error is not None:
-            raise self.error
-        index = len(self.tool_calls) - 1
-        if index >= len(self.tool_turns):
-            raise AssertionError("FakeLlmGateway has no scripted tool turn remaining")
-        return self.tool_turns[index]
 
     async def complete_json(
         self,
@@ -259,14 +234,6 @@ class FakeLlmGateway:
             cost_usd=Decimal("0.0001"),
             latency_ms=5,
             finish_reason="stop",
-        )
-
-    async def probe(self, invocation: LlmInvocation) -> LlmProbeResult:
-        self.probe_calls.append(invocation)
-        if self.probe_error is not None:
-            raise self.probe_error
-        return LlmProbeResult(
-            model=self.model, tier=self.tier, latency_ms=3, cost_usd=None, sample="ok"
         )
 
 

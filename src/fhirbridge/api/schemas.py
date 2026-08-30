@@ -104,64 +104,6 @@ class ConvertRequest(BaseModel):
     )
 
 
-class CraftRequest(BaseModel):
-    """Body of ``POST /v1/craft``.
-
-    Same shape as :class:`ConvertRequest`: a clinical narrative (PHI, in the body)
-    and optional profile targets plus post-assembly cascade controls. The
-    difference is entirely server-side — the narrative is turned into FHIR by a
-    tool-driven agent whose every edit is validated before it is kept.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    text: str = Field(
-        min_length=1,
-        description="The clinical narrative to convert into FHIR. Sent in the body as PHI.",
-    )
-    profiles: list[str] = Field(
-        default_factory=list,
-        description="Profile canonical URLs to target and validate the assembled bundle against.",
-        examples=[["http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"]],
-    )
-    layers: list[ValidationLayer] | None = Field(
-        default=None,
-        description=(
-            "Restrict the post-assembly cascade to these layers. Omit to run every "
-            "layer that can run."
-        ),
-    )
-    max_terminology_checks: Annotated[int, Field(ge=1, le=2000)] = Field(
-        default=500,
-        description="Cap on distinct $validate-code calls for the L3 layer.",
-    )
-    validate_output: bool = Field(
-        default=True,
-        description=(
-            "Run validate_draft and the final validation cascade. Set false only for "
-            "comparison/evaluation workloads; the returned Bundle will be explicitly "
-            "marked unvalidated and must not be used clinically."
-        ),
-    )
-
-
-class CraftToolCall(BaseModel):
-    """One step in the agent's trace: which tool ran and whether it committed."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    iteration: int
-    tool: str | None = None
-    ok: bool | None = None
-    finish: bool | None = None
-    error: str | None = Field(
-        default=None, description="Why a tool refused the edit, when it did. May quote values."
-    )
-    event: str | None = Field(
-        default=None, description="A loop event with no tool, e.g. 'budget_exhausted'."
-    )
-
-
 class LlmCallInfo(BaseModel):
     """Aggregate model-call provenance. No prompt or completion content (principle 2.6)."""
 
@@ -191,161 +133,6 @@ class ConvertResponse(BaseModel):
         description="The L1-L5 validation of the generated bundle. Read status before trusting it."
     )
     llm: LlmCallInfo
-
-
-class CraftResponse(BaseModel):
-    """Body of ``POST /v1/craft``."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    conversion_id: str = Field(description="Opaque id for this conversion; also on the report.")
-    bundle: FhirResource = Field(
-        description="The FHIR R4 Bundle the agent assembled through validated tool edits."
-    )
-    report: ValidationReport | None = Field(
-        default=None,
-        description=(
-            "The L1-L5 validation of the assembled bundle, or null when the caller "
-            "explicitly disabled output validation."
-        ),
-    )
-    validated: bool = Field(description="Whether the final validation cascade ran.")
-    llm: LlmCallInfo = Field(
-        description="Aggregate provenance across every model call the agent made."
-    )
-    trace: list[CraftToolCall] = Field(
-        default_factory=list,
-        description="Ordered record of each tool the agent ran and whether it was accepted.",
-    )
-    iterations: int = Field(description="Tool-calling turns the agent took.")
-    stop_reason: str = Field(
-        description="Why the loop ended: finished, max_iterations, budget_exhausted, or "
-        "no_tool_calls."
-    )
-    toolset_version: str = Field(description="Version of the deterministic tool set that ran.")
-
-
-class LlmProbeResponse(BaseModel):
-    """Body of ``POST /v1/llm/probe`` — a connectivity and credential check."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    ok: bool = Field(description="True when the provider answered the probe.")
-    provider: str
-    model: str
-    qualification_tier: str
-    latency_ms: int
-    cost_usd: float | None = None
-    sample: str | None = Field(
-        default=None, description="A short, non-PHI excerpt of the probe completion."
-    )
-
-
-class ValidateCodeRequest(BaseModel):
-    """Body of ``POST /v1/terminology/validate-code``."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    system: str | None = Field(
-        default=None,
-        description="CodeSystem canonical URL. Required unless value_set is given.",
-        examples=["http://snomed.info/sct"],
-    )
-    code: str = Field(description="The code to validate.", examples=["49436004"])
-    display: str | None = Field(
-        default=None, description="Display to check against the server's designations."
-    )
-    version: str | None = Field(default=None, description="CodeSystem version.")
-    value_set: str | None = Field(
-        default=None,
-        description=(
-            "ValueSet canonical URL. When supplied, membership is checked as well as "
-            "code existence."
-        ),
-    )
-
-
-class ValidateCodeResponse(BaseModel):
-    """Result of one ``$validate-code`` call, as answered by the terminology server."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    result: bool = Field(description="True only if the terminology server confirmed the code.")
-    system: str | None = None
-    code: str
-    display: str | None = Field(
-        default=None, description="The server's preferred display for the code."
-    )
-    value_set: str | None = None
-    code_system_version: str | None = Field(
-        default=None, description="The CodeSystem version the server answered from."
-    )
-    message: str | None = None
-    issues: list[str] = Field(default_factory=list)
-
-
-class TerminologySearchRequest(BaseModel):
-    """Body of ``POST /v1/terminology/search``."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    query: str = Field(min_length=1, description="Text to search for.")
-    system: str | None = Field(
-        default=None,
-        description="CodeSystem canonical URL. Required unless value_set is given.",
-    )
-    value_set: str | None = Field(
-        default=None,
-        description="ValueSet canonical URL to search instead of an entire CodeSystem.",
-    )
-    count: Annotated[int, Field(ge=1, le=100)] = Field(
-        default=10,
-        description="Maximum number of candidates to return.",
-    )
-
-
-class TerminologySearchCandidate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    system: str | None = None
-    code: str
-    display: str | None = None
-
-
-class TerminologySearchResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    candidates: list[TerminologySearchCandidate] = Field(default_factory=list)
-
-
-class TerminologyMapRequest(BaseModel):
-    """Body of ``POST /v1/terminology/map`` (a ``$translate`` passthrough)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    system: str = Field(description="Source CodeSystem canonical URL.")
-    code: str = Field(description="Source code.")
-    target_system: str | None = Field(default=None, description="Target CodeSystem canonical URL.")
-    concept_map: str | None = Field(default=None, description="ConceptMap canonical URL to use.")
-
-
-class TerminologyMapMatch(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    equivalence: str = Field(description="FHIR concept-map-equivalence / relationship code.")
-    system: str | None = None
-    code: str | None = None
-    display: str | None = None
-    version: str | None = None
-    source: str | None = Field(default=None, description="The ConceptMap that produced the match.")
-
-
-class TerminologyMapResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    result: bool
-    matches: list[TerminologyMapMatch] = Field(default_factory=list)
-    message: str | None = None
 
 
 class VersionResponse(BaseModel):
@@ -428,23 +215,11 @@ __all__ = [
     "CapabilitiesResponse",
     "ConvertRequest",
     "ConvertResponse",
-    "CraftRequest",
-    "CraftResponse",
-    "CraftToolCall",
     "DependencyHealthResponse",
     "DependencyStatus",
     "LiveResponse",
     "LlmCallInfo",
-    "LlmProbeResponse",
     "ReadyResponse",
-    "TerminologyMapMatch",
-    "TerminologyMapRequest",
-    "TerminologyMapResponse",
-    "TerminologySearchCandidate",
-    "TerminologySearchRequest",
-    "TerminologySearchResponse",
-    "ValidateCodeRequest",
-    "ValidateCodeResponse",
     "ValidateRequest",
     "VersionResponse",
 ]

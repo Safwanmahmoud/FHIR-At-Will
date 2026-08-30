@@ -8,12 +8,11 @@ per-request BYOK context parsed from ``X-LLM-*`` headers.
 
 from __future__ import annotations
 
-from fhirbridge.llm.gateway import LlmGateway, LlmProbeResult, LlmResult
+from fhirbridge.llm.gateway import LlmGateway, LlmResult
 from fhirbridge.llm.invocation import LlmInvocation
 
 __all__ = [
     "LlmGateway",
     "LlmInvocation",
-    "LlmProbeResult",
     "LlmResult",
 ]

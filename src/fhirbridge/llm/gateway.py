@@ -56,9 +56,6 @@ _LOOPBACK: Final[frozenset[str]] = frozenset({"localhost", "127.0.0.1", "::1"})
 DEFAULT_MAX_TOKENS: Final[int] = 4096
 """Bounds the worst-case cost of a single completion when pricing is unknown."""
 
-_PROBE_MAX_TOKENS: Final[int] = 16
-_PROBE_PROMPT: Final[str] = "Reply with the single word: ok"
-
 _LLM_CALL_TIMEOUT_S: Final[float] = 120.0
 
 
@@ -67,44 +64,6 @@ class LlmResult:
     """The outcome of a JSON completion."""
 
     resource: dict[str, Any]
-    model: str
-    usage: dict[str, int] = field(default_factory=dict)
-    cost_usd: Decimal | None = None
-    latency_ms: int = 0
-    finish_reason: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class LlmProbeResult:
-    """The outcome of a connectivity probe. Carries no PHI."""
-
-    model: str
-    tier: QualificationTier
-    latency_ms: int
-    cost_usd: Decimal | None = None
-    sample: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class LlmToolCall:
-    """One tool the model asked to run, with its raw JSON argument string."""
-
-    id: str
-    name: str
-    arguments: str
-
-
-@dataclass(frozen=True, slots=True)
-class LlmToolTurn:
-    """One assistant turn in a tool-calling loop.
-
-    ``assistant_message`` is the OpenAI-shaped message to append to the running
-    history before the tool results, so the next call sees its own tool_calls.
-    """
-
-    content: str
-    tool_calls: tuple[LlmToolCall, ...]
-    assistant_message: dict[str, Any]
     model: str
     usage: dict[str, int] = field(default_factory=dict)
     cost_usd: Decimal | None = None
@@ -206,62 +165,6 @@ class LlmGateway:
             finish_reason=_finish_reason(response),
         )
 
-    async def complete_with_tools(
-        self,
-        invocation: LlmInvocation,
-        *,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]],
-        tool_choice: str = "auto",
-        max_tokens: int = DEFAULT_MAX_TOKENS,
-        authorize: bool = True,
-    ) -> LlmToolTurn:
-        """Run one tool-calling turn: the model may answer or ask to run tools.
-
-        ``authorize`` defaults on so a single call is safe on its own; the agent
-        loop authorizes once up front and passes ``authorize=False`` thereafter,
-        since the gates are pure and the invocation does not change between turns.
-        """
-        if authorize:
-            self.authorize(invocation, sending_phi=True)
-        self._enforce_budget(invocation, messages, max_tokens)
-
-        response, latency_ms = await self._acompletion(
-            invocation,
-            messages,
-            max_tokens=max_tokens,
-            json_mode=False,
-            tools=tools,
-            tool_choice=tool_choice,
-        )
-        content = _first_content(response)
-        tool_calls = _tool_calls(response)
-        return LlmToolTurn(
-            content=content,
-            tool_calls=tool_calls,
-            assistant_message=_assistant_message(content, tool_calls),
-            model=_response_model(response, invocation),
-            usage=_usage(response),
-            cost_usd=_completion_cost(response),
-            latency_ms=latency_ms,
-            finish_reason=_finish_reason(response),
-        )
-
-    async def probe(self, invocation: LlmInvocation) -> LlmProbeResult:
-        """Verify connectivity and credentials with a trivial, PHI-free prompt."""
-        tier = self.authorize(invocation, sending_phi=False)
-        messages = [{"role": "user", "content": _PROBE_PROMPT}]
-        response, latency_ms = await self._acompletion(
-            invocation, messages, max_tokens=_PROBE_MAX_TOKENS, json_mode=False
-        )
-        return LlmProbeResult(
-            model=_response_model(response, invocation),
-            tier=tier,
-            latency_ms=latency_ms,
-            cost_usd=_completion_cost(response),
-            sample=_first_content(response).strip()[:200] or None,
-        )
-
     # --- Provider transport (lazy litellm) --------------------------------
 
     async def _acompletion(
@@ -271,8 +174,6 @@ class LlmGateway:
         *,
         max_tokens: int,
         json_mode: bool,
-        tools: list[dict[str, Any]] | None = None,
-        tool_choice: str | None = None,
     ) -> tuple[Any, int]:
         import litellm  # lazy: heavy import, and validate-only deployments never call an LLM
 
@@ -281,8 +182,6 @@ class LlmGateway:
             messages,
             max_tokens=max_tokens,
             json_mode=json_mode,
-            tools=tools,
-            tool_choice=tool_choice,
         )
         if self.settings.debug_capture_llm_io:
             logger.warning("llm_request_captured", extra={"messages": messages})
@@ -308,8 +207,6 @@ class LlmGateway:
         *,
         max_tokens: int,
         json_mode: bool,
-        tools: list[dict[str, Any]] | None = None,
-        tool_choice: str | None = None,
     ) -> dict[str, Any]:
         kwargs: dict[str, Any] = {
             "model": _litellm_model(invocation),
@@ -323,17 +220,7 @@ class LlmGateway:
             kwargs["api_base"] = invocation.base_url
         if invocation.extra_headers:
             kwargs["extra_headers"] = dict(invocation.extra_headers)
-        if tools:
-            # Tool calling and forced JSON output are mutually exclusive across
-            # providers, so a tools call never also sets response_format.
-            kwargs["tools"] = tools
-            kwargs["tool_choice"] = tool_choice or "auto"
-            # Let the model emit several tool calls in one turn, collapsing what
-            # would otherwise be one round-trip per fact. drop_params keeps
-            # providers that do not accept this flag from rejecting the request.
-            kwargs["parallel_tool_calls"] = True
-            kwargs["drop_params"] = True
-        elif json_mode:
+        if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
         return kwargs
 
@@ -406,45 +293,6 @@ def _first_content(response: Any) -> str:
     except (AttributeError, IndexError, TypeError):
         return ""
     return content if isinstance(content, str) else ""
-
-
-def _tool_calls(response: Any) -> tuple[LlmToolCall, ...]:
-    """Extract the tool calls a model requested, tolerating provider variance."""
-    try:
-        raw = response.choices[0].message.tool_calls or []
-    except (AttributeError, IndexError, TypeError):
-        return ()
-    calls: list[LlmToolCall] = []
-    for item in raw:
-        function = getattr(item, "function", None)
-        name = getattr(function, "name", None)
-        if not isinstance(name, str) or not name:
-            continue
-        arguments = getattr(function, "arguments", "") or ""
-        call_id = getattr(item, "id", None) or f"call_{len(calls)}"
-        calls.append(
-            LlmToolCall(
-                id=str(call_id),
-                name=name,
-                arguments=arguments if isinstance(arguments, str) else "",
-            )
-        )
-    return tuple(calls)
-
-
-def _assistant_message(content: str, tool_calls: tuple[LlmToolCall, ...]) -> dict[str, Any]:
-    """Rebuild the assistant message to feed back into the running history."""
-    message: dict[str, Any] = {"role": "assistant", "content": content or ""}
-    if tool_calls:
-        message["tool_calls"] = [
-            {
-                "id": call.id,
-                "type": "function",
-                "function": {"name": call.name, "arguments": call.arguments},
-            }
-            for call in tool_calls
-        ]
-    return message
 
 
 def _finish_reason(response: Any) -> str | None:
@@ -555,8 +403,5 @@ def _map_llm_exception(exc: Exception) -> FhirbridgeError | None:
 __all__ = [
     "DEFAULT_MAX_TOKENS",
     "LlmGateway",
-    "LlmProbeResult",
     "LlmResult",
-    "LlmToolCall",
-    "LlmToolTurn",
 ]

@@ -46,20 +46,8 @@ async def test_every_declared_operation_is_routable(
         if route.path.startswith("/fhir/R4/$")
     }
 
-    assert declared == set(SUPPORTED_OPERATIONS)
+    assert declared == set(SUPPORTED_OPERATIONS) == set()
     assert declared <= routed
-
-
-async def test_unimplemented_operations_are_not_advertised(
-    anon_client: httpx.AsyncClient,
-) -> None:
-    statement = (await anon_client.get("/fhir/R4/metadata")).json()
-    declared = {
-        operation["name"] for rest in statement["rest"] for operation in rest.get("operation", [])
-    }
-
-    assert "convert" not in declared
-    assert "extract" not in declared
 
 
 async def test_statement_says_this_is_not_a_repository(

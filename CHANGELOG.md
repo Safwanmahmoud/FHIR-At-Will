@@ -6,8 +6,8 @@ semantic versioning after its first public release.
 ## Unreleased
 
 - Prepare the repository for public contribution and coordinated disclosure.
-- Add the agentic `/v1/craft` and streaming craft workflows.
 - Add grounded two-stage `/v1/NAR2FHIR` conversion.
+- Consolidate narrative-to-FHIR conversion on `/v1/NAR2FHIR`.
 - Add authenticated terminology search.
 
 ## 0.1.0 - 2026-08-28

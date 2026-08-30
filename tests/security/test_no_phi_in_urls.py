@@ -44,7 +44,7 @@ def test_route_discovery_is_not_vacuous(app: FastAPI) -> None:
     """The static checks below are worthless if they inspect an empty list."""
     paths = {route.path for route in api_routes(app)}
 
-    assert {"/v1/validate", "/v1/terminology/validate-code", "/fhir/R4/$validate"} <= paths
+    assert {"/v1/validate", "/v1/NAR2FHIR"} <= paths
 
 
 def test_no_route_accepts_clinical_content_as_a_query_parameter(app: FastAPI) -> None:

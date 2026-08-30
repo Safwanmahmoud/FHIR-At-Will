@@ -3,9 +3,7 @@
 Narrative conversion depends on provider and model capabilities that can change
 outside this project.
 
-`/v1/NAR2FHIR` requires reliable structured JSON output. `/v1/craft` and
-`/v1/craft/stream` additionally require tool calling. Use `/v1/llm/probe` for a
-PHI-free connectivity and policy check before a conversion.
+`/v1/NAR2FHIR` requires reliable structured JSON output.
 
 Models are assigned a qualification tier. Unknown models are `unqualified` and
 are refused when below `MIN_QUALIFICATION_TIER`. Lowering that threshold is an
@@ -14,6 +12,6 @@ Bundle must be evaluated using its returned validation report.
 
 Provider availability, context limits, pricing, content filters, and supported
 parameters are not stable API contracts of FHIR at Will. Set
-`MAX_COST_USD_PER_CONVERSION` and `MAX_AGENT_ITERATIONS` to bound individual
-requests, and treat provider metadata in responses as operational evidence
-rather than a performance guarantee.
+`MAX_COST_USD_PER_CONVERSION` to bound individual requests, and treat provider
+metadata in responses as operational evidence rather than a performance
+guarantee.

@@ -37,7 +37,7 @@ def _authenticated_routes(app: FastAPI) -> list[APIRoute]:
 def test_every_non_public_route_requires_authentication(app: FastAPI) -> None:
     """Route-level check: the principal dependency must actually be wired in."""
     routes = _authenticated_routes(app)
-    assert len(routes) >= 8, "route discovery found nothing; the check would pass vacuously"
+    assert len(routes) >= 6, "route discovery found nothing; the check would pass vacuously"
 
     offenders = [
         f"{sorted(route.methods)} {route.path}"

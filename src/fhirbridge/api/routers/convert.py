@@ -1,12 +1,11 @@
-"""``POST /v1/NAR2FHIR`` and ``POST /v1/llm/probe``.
+"""``POST /v1/NAR2FHIR``.
 
 NAR2FHIR uses two grounded calls: extract catalog-constrained facts first, then
 assemble those facts into typed FHIR structures. The generated Bundle is scored
 through the same L1-L5 cascade as ``POST /v1/validate``.
 
-Both endpoints are BYOK — the caller supplies provider, model and key in
-``X-LLM-*`` headers — and both require the ``conversions:write`` scope, because
-both spend the caller's money and send traffic to an external provider.
+The endpoint is BYOK — the caller supplies provider, model and key in
+``X-LLM-*`` headers — and requires the ``conversions:write`` scope.
 
 This build's conversion is synchronous and stateless: like ``/v1/validate`` it
 retains nothing. The persisted, fact-based, asynchronous ``/v1/conversions``
@@ -33,7 +32,6 @@ from fhirbridge.api.schemas import (
     ConvertRequest,
     ConvertResponse,
     LlmCallInfo,
-    LlmProbeResponse,
 )
 from fhirbridge.domain.ids import IdPrefix, new_id
 from fhirbridge.llm.gateway import LlmResult
@@ -71,13 +69,6 @@ _LLM_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 @router.post(
     "/NAR2FHIR",
     summary="Convert narrative to a validated FHIR Bundle with grounded extraction (BYOK)",
-    response_model=ConvertResponse,
-    responses=_LLM_ERROR_RESPONSES,
-)
-@router.post(
-    "/convert",
-    include_in_schema=False,
-    deprecated=True,
     response_model=ConvertResponse,
     responses=_LLM_ERROR_RESPONSES,
 )
@@ -174,37 +165,6 @@ def _combined_cost(*results: LlmResult) -> float | None:
     if any(result.cost_usd is None for result in results):
         return None
     return float(sum(result.cost_usd for result in results if result.cost_usd is not None))
-
-
-@router.post(
-    "/llm/probe",
-    summary="Verify BYOK connectivity and credentials without sending PHI",
-    response_model=LlmProbeResponse,
-    responses=_LLM_ERROR_RESPONSES,
-)
-async def probe(
-    principal: PrincipalDep,
-    invocation: LlmInvocationDep,
-    gateway: LlmGatewayDep,
-    response: Response,
-) -> LlmProbeResponse:
-    """Send a trivial, PHI-free prompt to confirm the caller's model is reachable."""
-    principal.require(Scope.CONVERSIONS_WRITE)
-    result = await gateway.probe(invocation)
-    logger.info(
-        "llm_probe_completed",
-        extra={"actor_id": principal.actor_id, "model": result.model},
-    )
-    response.headers["Cache-Control"] = "no-store"
-    return LlmProbeResponse(
-        ok=True,
-        provider=invocation.provider,
-        model=result.model,
-        qualification_tier=str(result.tier),
-        latency_ms=result.latency_ms,
-        cost_usd=float(result.cost_usd) if result.cost_usd is not None else None,
-        sample=result.sample,
-    )
 
 
 __all__ = ["router"]

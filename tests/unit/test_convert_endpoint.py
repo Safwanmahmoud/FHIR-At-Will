@@ -1,4 +1,4 @@
-"""``POST /v1/NAR2FHIR`` and ``POST /v1/llm/probe``.
+"""``POST /v1/NAR2FHIR``.
 
 The gateway is scripted here (``FakeLlmGateway``): the point is what the endpoint
 does with the model's output, above all that it runs it through the real cascade
@@ -148,35 +148,25 @@ class TestConvert:
 
         assert secret_note not in response.text
 
-    async def test_the_old_convert_route_is_a_compatibility_alias(
-        self, app: FastAPI, client: httpx.AsyncClient, all_dependencies_healthy: None
+
+class TestNarrativeRouteSurface:
+    async def test_alternative_narrative_routes_do_not_exist(
+        self, client: httpx.AsyncClient
     ) -> None:
-        gateway = nar2fhir_gateway()
-        app.dependency_overrides[get_llm_gateway] = lambda: gateway
-
-        response = await client.post("/v1/convert", json={"text": "HR 72"}, headers=BYOK_HEADERS)
-
-        assert response.status_code == 200
-        assert response.json()["bundle"]["resourceType"] == "Bundle"
-
-
-class TestProbe:
-    async def test_it_reports_connectivity_and_tier(
-        self, app: FastAPI, client: httpx.AsyncClient
-    ) -> None:
-        gateway = FakeLlmGateway()
-        app.dependency_overrides[get_llm_gateway] = lambda: gateway
-
-        response = await client.post("/v1/llm/probe", headers=BYOK_HEADERS)
-
-        assert response.status_code == 200
-        body = response.json()
-        assert body["ok"] is True
-        assert body["model"] == gateway.model
-        assert body["qualification_tier"] == "silver"
-        assert gateway.probe_calls
-
-    async def test_it_requires_authentication(self, anon_client: httpx.AsyncClient) -> None:
-        response = await anon_client.post("/v1/llm/probe", headers=BYOK_HEADERS)
-
-        assert response.status_code == 401
+        for path in (
+            "/v1/convert",
+            "/v1/craft",
+            "/v1/craft/stream",
+            "/fhir/R4/$convert",
+            "/fhir/R4/$extract",
+            "/v1/llm/probe",
+            "/v1/terminology/search",
+            "/v1/terminology/validate-code",
+            "/v1/terminology/map",
+            "/fhir/R4/$validate",
+            "/v1/translate/hl7v2",
+            "/v1/translate/cda",
+            "/v1/translate/tabular",
+        ):
+            response = await client.post(path, json={})
+            assert response.status_code == 404, path

@@ -32,12 +32,9 @@ from fhirbridge.api.middleware import (
 from fhirbridge.api.openapi import install_openapi
 from fhirbridge.api.routers import (
     convert,
-    craft,
     fhir_facade,
     health,
     meta,
-    terminology,
-    translate,
     validate,
 )
 from fhirbridge.config import Settings, get_settings
@@ -136,9 +133,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(meta.router)
     app.include_router(validate.router)
     app.include_router(convert.router)
-    app.include_router(craft.router)
-    app.include_router(terminology.router)
-    app.include_router(translate.router)
     app.include_router(fhir_facade.router)
 
     install_openapi(app)

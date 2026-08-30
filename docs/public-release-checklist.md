@@ -41,7 +41,7 @@ Do not upload the backup bundle or old refs to the public repository.
 
 ## Website and hosted service
 
-- Update `fhiratwill.com` so roadmap, BYOK/craft capability claims, and clone
+- Update `fhiratwill.com` so roadmap, BYOK/NAR2FHIR capability claims, and clone
   commands match this repository.
 - Confirm the playground and documentation never encourage real patient data.
 - Treat the Railway hostname as public infrastructure: keep authentication,

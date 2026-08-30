@@ -5,10 +5,10 @@ The service does not include a provider key.
 
 ## Supplying credentials
 
-Send `X-LLM-Provider`, `X-LLM-Model`, and `X-LLM-API-Key` on each conversion or
-probe request. `X-LLM-Base-Url` and `X-LLM-Extra-Headers` are optional and remain
-subject to egress policy. Do not place credentials in URLs, notebooks, source
-files, logs, or issue reports.
+Send `X-LLM-Provider`, `X-LLM-Model`, and `X-LLM-API-Key` on each conversion
+request. `X-LLM-Base-Url` and `X-LLM-Extra-Headers` are optional and remain subject
+to egress policy. Do not place credentials in URLs, notebooks, source files, logs,
+or issue reports.
 
 ## Transport security
 
@@ -30,9 +30,6 @@ When clinical content would leave the deployment boundary,
 is a policy gate, not consent, a data-processing agreement, or a compliance
 determination. Operators must independently establish whether a provider may
 receive the data.
-
-Use `/v1/llm/probe` to test credentials and routing with a PHI-free request
-before sending clinical content.
 
 ## Ephemeral keys and async jobs
 
