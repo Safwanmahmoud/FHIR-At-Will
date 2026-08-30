@@ -15,6 +15,13 @@ The provenance tag `ai-derived` means a language model proposed content.
 limitations. `human-reviewed` is reserved for an explicit future review
 workflow and is never inferred from automated validation.
 
+`machine-inferred` means at least one element required by FHIR was filled from
+a reviewed constant table because the source did not state it — for example
+`Observation.status` or `Encounter.class`. Such a value is auditable and
+reproducible but is not evidence about the patient. `POST /v1/NAR2FHIR` reports
+every inferred element, and every element it could not ground, in the response's
+`assembly` list; that list is the record to review, not the tag alone.
+
 Operators and downstream clients must:
 
 - inspect the complete validation report, including skipped checks;

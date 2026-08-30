@@ -36,7 +36,7 @@ The hosted playground supports:
 1. **Validate a resource** — submit a FHIR R4 resource or Bundle to the live
    eight-layer cascade.
 2. **Narrative → FHIR** — bring an OpenRouter key and use `POST /v1/NAR2FHIR` to
-   generate and validate a FHIR Bundle.
+   generate an unvalidated FHIR Bundle, then submit it to `POST /v1/validate`.
 
 ## What works today
 
@@ -46,7 +46,7 @@ The hosted playground supports:
 | Profile and invariant validation with the HL7 validator | Implemented |
 | Terminology validation within the validation cascade | Implemented |
 | Clinical plausibility rules | Implemented |
-| Grounded BYOK narrative-to-FHIR conversion (`/v1/NAR2FHIR`, two-stage) | Implemented |
+| Grounded BYOK narrative extraction with deterministic FHIR assembly (`/v1/NAR2FHIR`) | Implemented |
 | FHIR `OperationOutcome` validation response | Implemented |
 | API-key authentication and tenant-aware PostgreSQL RLS | Implemented |
 | JSON logs, Prometheus metrics, and OpenTelemetry hooks | Implemented |
@@ -306,15 +306,38 @@ A bare FHIR resource is also accepted with
 
 ## NAR2FHIR: convert narrative to FHIR
 
-`POST /v1/NAR2FHIR` is synchronous, stateless, and BYOK. It first extracts
-catalog-constrained resource types, keys, and values, then makes a second call to
-assemble those grounded facts into typed FHIR structures. It validates the generated
-Bundle and returns:
+`POST /v1/NAR2FHIR` is synchronous, stateless, and BYOK. It makes **one** model
+call, which extracts catalog-constrained resource types, keys, and values, each
+tagged with an `instance` key identifying which real-world thing it describes.
+Assembly into typed FHIR is then deterministic Python: no model sees the Bundle, so
+the same entities always produce the same Bundle.
+
+That boundary is deliberate. Choosing a FHIR datatype has one correct answer and
+does not need a model, while a model asked to do it may invent a
+`Coding.system`/`code` pair or nest a string where an object belongs. Assembly
+therefore refuses rather than approximates — `"62-year-old"` does not become a
+`birthDate`, and `"128/82 mmHg"` does not become a `Quantity` of 128 — and coded
+concepts carry `text` only, leaving code assertions to `/v1/validate`.
+
+It does not validate the generated Bundle. The response returns:
 
 - `bundle` — the generated FHIR R4 Bundle;
-- `report` — the full validation result;
+- `validated` — always `false`;
+- `assembly` — every element dropped, inferred, wired, or in conflict, with a
+  reason. PHI-free: it names entry indexes and element names, never values;
 - `llm` — model, token, cost, latency, and qualification metadata; and
 - `conversion_id` — an opaque correlation identifier, not a persisted job.
+
+Read `assembly` before the Bundle. FHIR requires elements a narrative rarely
+states — `Observation.status`, `Encounter.class`, `MedicationRequest.intent` — and
+assembly fills those from a reviewed constant table, marking the resource
+`machine-inferred` and listing each one as an `inferred` note. Such a value is
+reproducible and auditable but is not evidence about the patient.
+
+There is no `profiles` field on the request. Assembly validates nothing, so it
+cannot honor a profile; pass profiles to `POST /v1/validate` instead.
+
+Submit the returned `bundle` separately to `POST /v1/validate` before trusting it.
 
 The service does not hold an LLM key. Supply invocation details on every request:
 
@@ -370,9 +393,21 @@ response = httpx.post(
 response.raise_for_status()
 
 result = response.json()
-print(result["report"]["status"])  # inspect before using result["bundle"]
-print(result["report"]["conformant"])
+assert result["validated"] is False
 print(result["llm"]["model"], result["llm"]["cost_usd"])
+
+# Read what could not be grounded before reading the Bundle.
+for note in result["assembly"]:
+    print(note["action"], note["resource_type"], note["element"], note["detail"])
+
+validation = httpx.post(
+    f"{base_url}/v1/validate",
+    headers={"Authorization": f"Bearer {api_key}"},
+    json={"resource": result["bundle"]},
+    timeout=300,
+)
+validation.raise_for_status()
+print(validation.json()["status"])
 ```
 
 The model must support structured JSON output. Prose, truncated JSON, or output outside
@@ -403,7 +438,7 @@ capabilities vary by provider.
 | `GET` | `/v1/igs` | Preloaded implementation guides |
 | `POST` | `/v1/validate` | Structured validation report |
 | `POST` | `/v1/validate/outcome` | Validation as `OperationOutcome` |
-| `POST` | `/v1/NAR2FHIR` | Two-stage grounded BYOK narrative conversion and validation |
+| `POST` | `/v1/NAR2FHIR` | Grounded BYOK extraction, deterministic FHIR assembly (unvalidated) |
 
 `/v1/NAR2FHIR` requires the `conversions:write` scope.
 
@@ -510,7 +545,7 @@ notebook outputs are persisted in the file.
 | `src/fhirbridge/api/` | FastAPI app, auth, schemas, middleware, and routers |
 | `src/fhirbridge/validation/` | Cascade orchestration, reports, and rule packs |
 | `src/fhirbridge/llm/` | BYOK gateway, policy gates, qualification, and prompts |
-| `src/fhirbridge/fhir/` | Typed models, `OperationOutcome`, and validator client |
+| `src/fhirbridge/fhir/` | Typed models, deterministic Bundle assembly, `OperationOutcome`, validator client |
 | `src/fhirbridge/terminology/` | Terminology client and result models |
 | `src/fhirbridge/storage/` | SQLAlchemy models, tenant sessions, and RLS checks |
 | `src/fhirbridge/observability/` | Logging, redaction, metrics, and tracing |

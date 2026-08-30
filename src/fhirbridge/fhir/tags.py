@@ -23,11 +23,28 @@ UNQUALIFIED_MODEL: Final[str] = "unqualified-model"
 NONDETERMINISM_RISK: Final[str] = "nondeterminism-risk"
 """Reproducibility could not be guaranteed for this resource (AGENTS.md 7.10)."""
 
+MACHINE_INFERRED: Final[str] = "machine-inferred"
+"""A required element was filled from a declared default, not from the source.
+
+FHIR requires elements a narrative rarely states — ``Observation.status``,
+``Encounter.class``, ``MedicationRequest.intent``. Deterministic assembly supplies
+them from a reviewed constant table so the value is auditable and identical on
+every run, but it is still not grounded in the source. This tag marks resources
+carrying at least one such value; the per-element detail is reported alongside the
+Bundle rather than embedded in it.
+
+Narrower than :data:`AI_DERIVED` on purpose: structural inference that cannot be
+wrong given the input, such as pointing ``subject`` at the only Patient in the
+document, is reported but not tagged, so this tag keeps meaning "a required value
+here was fabricated".
+"""
+
 ALL_TAGS: Final[tuple[str, ...]] = (
     AI_DERIVED,
     HUMAN_REVIEWED,
     UNQUALIFIED_MODEL,
     NONDETERMINISM_RISK,
+    MACHINE_INFERRED,
 )
 
 
@@ -43,6 +60,7 @@ __all__ = [
     "AI_DERIVED",
     "ALL_TAGS",
     "HUMAN_REVIEWED",
+    "MACHINE_INFERRED",
     "NONDETERMINISM_RISK",
     "PROVENANCE_TAG_SYSTEM",
     "UNQUALIFIED_MODEL",

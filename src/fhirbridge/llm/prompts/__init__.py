@@ -14,7 +14,7 @@ import hashlib
 from dataclasses import dataclass
 from typing import Final
 
-from fhirbridge.llm.nar2fhir import DATATYPE_LEGEND, resource_catalog_text
+from fhirbridge.llm.nar2fhir import resource_catalog_text
 from fhirbridge.version import PROMPT_SET_VERSION
 
 
@@ -35,10 +35,19 @@ NARRATIVE_TO_ENTITIES: Final[PromptTemplate] = PromptTemplate(
     system=(
         "Extract every explicitly stated clinical and demographic entity from the "
         "narrative. Return exactly one JSON object containing only an `entities` array. "
-        "Each item must contain exactly `resourceType`, `keyword`, and `value`.\n\n"
+        "Each item must contain exactly `resourceType`, `instance`, `keyword`, and "
+        "`value`.\n\n"
         "`resourceType` must be an exact resource type from the catalog. `keyword` must "
         "be an exact allowed key under that same resource type. `value` must preserve "
         "the source wording or be minimally normalized.\n\n"
+        "`instance` identifies which single real-world thing a fact describes. Use a "
+        "short slug of lowercase letters, digits, and hyphens, reused by every key "
+        "belonging to that same thing, for example `patient-1`, `obs-blood-pressure`, "
+        "`obs-heart-rate`, `med-metformin`. Two facts share an `instance` only when one "
+        "resource would carry both. Give every distinct measurement, condition, "
+        "encounter, and medication its own `instance`. Name the kind of thing, never "
+        "the person: an `instance` must not contain a patient name, an identifier, a "
+        "date, or any other identifying detail.\n\n"
         "Create a separate item for every entity, even when items share a key or type. "
         "Use each description to choose the resource whose purpose matches the fact. "
         "Choose the most specific allowed key. Never infer missing facts, return FHIR "
@@ -51,41 +60,8 @@ NARRATIVE_TO_ENTITIES: Final[PromptTemplate] = PromptTemplate(
     ),
 )
 
-ENTITIES_TO_FHIR_BUNDLE: Final[PromptTemplate] = PromptTemplate(
-    id="nar2fhir_entities_to_bundle",
-    system=(
-        "You are a FHIR R4 (4.0.1) assembly system. Convert a clinical narrative and "
-        "its grounded extracted entities into valid FHIR resources. Return exactly one "
-        'JSON object: {"resourceType":"Bundle","type":"collection","entry":[...]}. '
-        "Return JSON only, without prose or markdown.\n\n"
-        "Rules:\n"
-        "1. Build one resource per distinct real-world instance; do not collapse "
-        "separate events merely because they share a resource type.\n"
-        "2. Use only the supplied fields for each resource type and omit unsupported "
-        "facts. Always include resourceType on every resource.\n"
-        "3. Represent fields using their declared FHIR datatype, never a bare string "
-        "where an object or array is required.\n"
-        "4. For coded concepts, use CodeableConcept.text. Add Coding.system and "
-        "Coding.code only when the narrative explicitly supplies an exact code; never "
-        "invent codes.\n"
-        "5. Give each entry a unique urn:uuid fullUrl and link resources using those "
-        "fullUrls. Do not invent external identifiers.\n"
-        "6. Use ISO 8601 dates and UCUM quantities when stated. Omit resources whose "
-        "required fields cannot be grounded.\n"
-        "7. Apply requested profiles only when the generated resource satisfies them.\n\n"
-        "Common datatype shapes:\n" + DATATYPE_LEGEND
-    ),
-    user_template=(
-        "Requested profiles (may be empty): {profiles}\n\n"
-        "Allowed resource fields and datatypes:\n{field_reference}\n\n"
-        "Clinical narrative:\n{narrative}\n\n"
-        "Grounded extracted entities:\n{entities}"
-    ),
-)
-
 PROMPT_SET: Final[dict[str, PromptTemplate]] = {
     NARRATIVE_TO_ENTITIES.id: NARRATIVE_TO_ENTITIES,
-    ENTITIES_TO_FHIR_BUNDLE.id: ENTITIES_TO_FHIR_BUNDLE,
 }
 
 
@@ -107,7 +83,6 @@ def prompt_set_fingerprint() -> str:
 
 
 __all__ = [
-    "ENTITIES_TO_FHIR_BUNDLE",
     "NARRATIVE_TO_ENTITIES",
     "PROMPT_SET",
     "PROMPT_SET_VERSION",

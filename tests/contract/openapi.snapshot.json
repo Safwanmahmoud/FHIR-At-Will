@@ -1,6 +1,58 @@
 {
   "components": {
     "schemas": {
+      "AssemblyAction": {
+        "description": "What assembly did about an element it could not simply place.",
+        "enum": [
+          "dropped",
+          "inferred",
+          "wired",
+          "unresolved",
+          "conflict"
+        ],
+        "title": "AssemblyAction",
+        "type": "string"
+      },
+      "AssemblyNote": {
+        "additionalProperties": false,
+        "description": "One element that deterministic assembly could not simply place.\n\nPHI-free by construction: an entry index, an element name, and a reason, never\na value. This list is how a caller separates a grounded element from one that\nwas filled in \u2014 a distinction the resource itself cannot express.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/AssemblyAction",
+            "description": "What assembly did about the element."
+          },
+          "detail": {
+            "description": "Why assembly took this action. Never contains an extracted value.",
+            "title": "Detail",
+            "type": "string"
+          },
+          "element": {
+            "description": "The FHIR element name this note concerns.",
+            "title": "Element",
+            "type": "string"
+          },
+          "entry_index": {
+            "description": "Index into bundle.entry of the resource this note is about.",
+            "minimum": 0.0,
+            "title": "Entry Index",
+            "type": "integer"
+          },
+          "resource_type": {
+            "description": "Resource type of that entry.",
+            "title": "Resource Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry_index",
+          "resource_type",
+          "element",
+          "action",
+          "detail"
+        ],
+        "title": "AssemblyNote",
+        "type": "object"
+      },
       "CapabilitiesResponse": {
         "additionalProperties": false,
         "description": "Body of ``GET /v1/capabilities`` \u2014 what this build can actually do.",
@@ -85,44 +137,8 @@
       },
       "ConvertRequest": {
         "additionalProperties": false,
-        "description": "Body of ``POST /v1/NAR2FHIR``.\n\nThe clinical narrative is sent in the body, never a query parameter, because\nit is PHI (principle 2.6). The generated bundle is validated before it is\nreturned, so the response is a report as much as a conversion.",
+        "description": "Body of ``POST /v1/NAR2FHIR``.\n\nThe clinical narrative is sent in the body, never a query parameter, because\nit is PHI (principle 2.6). The generated bundle is returned unvalidated.\n\nThere is deliberately no ``profiles`` field. Assembly is deterministic and\nvalidates nothing, so it cannot honor a profile request; stamping\n``meta.profile`` on that basis would be an unverified conformance claim. Pass\nprofiles to ``POST /v1/validate`` instead.",
         "properties": {
-          "layers": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/ValidationLayer"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Restrict the post-generation cascade to these layers. Omit to run every layer that can run. L6 fidelity and L7 coverage require source spans and remain not-applicable until M3.",
-            "title": "Layers"
-          },
-          "max_terminology_checks": {
-            "default": 500,
-            "description": "Cap on distinct $validate-code calls for the L3 layer.",
-            "maximum": 2000.0,
-            "minimum": 1.0,
-            "title": "Max Terminology Checks",
-            "type": "integer"
-          },
-          "profiles": {
-            "description": "US Core (or other) profile canonical URLs to target and validate the generated bundle against.",
-            "examples": [
-              [
-                "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
-              ]
-            ],
-            "items": {
-              "type": "string"
-            },
-            "title": "Profiles",
-            "type": "array"
-          },
           "text": {
             "description": "The clinical narrative to convert into FHIR. Sent in the body as PHI.",
             "minLength": 1,
@@ -140,6 +156,14 @@
         "additionalProperties": false,
         "description": "Body of ``POST /v1/NAR2FHIR``.",
         "properties": {
+          "assembly": {
+            "description": "Every element assembly dropped, inferred, wired, or found in conflict. An empty list means each extracted fact mapped cleanly onto a typed element. Resources with an 'inferred' note also carry the machine-inferred tag.",
+            "items": {
+              "$ref": "#/components/schemas/AssemblyNote"
+            },
+            "title": "Assembly",
+            "type": "array"
+          },
           "bundle": {
             "additionalProperties": true,
             "description": "The generated FHIR R4 Bundle.",
@@ -147,22 +171,24 @@
             "type": "object"
           },
           "conversion_id": {
-            "description": "Opaque id for this conversion; also on the report.",
+            "description": "Opaque correlation id for this conversion.",
             "title": "Conversion Id",
             "type": "string"
           },
           "llm": {
             "$ref": "#/components/schemas/LlmCallInfo"
           },
-          "report": {
-            "$ref": "#/components/schemas/ValidationReport",
-            "description": "The L1-L5 validation of the generated bundle. Read status before trusting it."
+          "validated": {
+            "const": false,
+            "default": false,
+            "description": "Always false. Submit the Bundle to POST /v1/validate before trusting it.",
+            "title": "Validated",
+            "type": "boolean"
           }
         },
         "required": [
           "conversion_id",
           "bundle",
-          "report",
           "llm"
         ],
         "title": "ConvertResponse",
@@ -427,7 +453,7 @@
             "type": "integer"
           },
           "model": {
-            "description": "The model id reported by the final generation call.",
+            "description": "The model id reported by the extraction call.",
             "title": "Model",
             "type": "string"
           },
@@ -444,7 +470,7 @@
             "additionalProperties": {
               "type": "integer"
             },
-            "description": "Token counts aggregated across the endpoint's calls, when available.",
+            "description": "Token counts reported by the provider, when available.",
             "title": "Usage",
             "type": "object"
           }
@@ -1003,7 +1029,7 @@
       "name": "FHIR at Will",
       "url": "https://github.com/Safwanmahmoud/FHIR-It-Will"
     },
-    "description": "Convert unstructured clinical source material into validated, provenance-tagged\nFHIR R4 resources and return each generated result with a verification report\nand routing decision. Human review workflows are planned but are not included\nin this alpha release.\n\n**What this is not:** not a medical device, not clinical decision support, and not\na FHIR repository. Nothing is inferred beyond what the source text asserts, and no\nendpoint writes to an external FHIR server without an explicit, separate call.\n\n**Fail-closed behaviour.** When the FHIR validator or the terminology server is\nunavailable, requests fail with `503` rather than returning an unverified result.\nAn unvalidated code and an unvalidated bundle are worse than no answer.\n\n**Errors.** Clinical and FHIR-semantic failures return an `OperationOutcome`\nwhose `issue.details.coding` carries a stable machine code from\n`https://fhirbridge.org/CodeSystem/errors`. Platform failures return\n`{\"error\": {\"code\", \"message\", \"trace_id\", \"details\"}}`. Fetch the full code\nlist from `GET /v1/error-codes`.\n\n**No PHI in URLs.** Every endpoint that accepts clinical content accepts it in a\nrequest body. There is no `GET` endpoint taking clinical text as a query\nparameter, and none will be added.",
+    "description": "Convert unstructured clinical source material into FHIR R4 resources, or validate\nFHIR resources through a separate verification endpoint. Narrative conversion\nreturns unvalidated generated content; callers must submit it to `/v1/validate`\nbefore trusting it. Human review workflows are planned but are not included in\nthis alpha release.\n\n**What this is not:** not a medical device, not clinical decision support, and not\na FHIR repository. Nothing is inferred beyond what the source text asserts, and no\nendpoint writes to an external FHIR server without an explicit, separate call.\n\n**Fail-closed behaviour.** When the FHIR validator or the terminology server is\nunavailable, requests fail with `503` rather than returning an unverified result.\nAn unvalidated code and an unvalidated bundle are worse than no answer.\n\n**Errors.** Clinical and FHIR-semantic failures return an `OperationOutcome`\nwhose `issue.details.coding` carries a stable machine code from\n`https://fhirbridge.org/CodeSystem/errors`. Platform failures return\n`{\"error\": {\"code\", \"message\", \"trace_id\", \"details\"}}`. Fetch the full code\nlist from `GET /v1/error-codes`.\n\n**No PHI in URLs.** Every endpoint that accepts clinical content accepts it in a\nrequest body. There is no `GET` endpoint taking clinical text as a query\nparameter, and none will be added.",
     "license": {
       "identifier": "Apache-2.0",
       "name": "Apache-2.0"
@@ -1035,7 +1061,7 @@
     },
     "/v1/NAR2FHIR": {
       "post": {
-        "description": "Extract grounded facts, assemble a FHIR Bundle, then validate it.",
+        "description": "Extract grounded facts and assemble them into an unvalidated FHIR Bundle.",
         "operationId": "post_NAR2FHIR",
         "parameters": [
           {
@@ -1183,9 +1209,6 @@
           },
           "451": {
             "description": "The target LLM host is blocked by egress policy."
-          },
-          "503": {
-            "description": "The validator or terminology server is unavailable; failing closed."
           }
         },
         "security": [
@@ -1193,7 +1216,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "Convert narrative to a validated FHIR Bundle with grounded extraction (BYOK)",
+        "summary": "Convert narrative to an unvalidated FHIR Bundle with grounded extraction (BYOK)",
         "tags": [
           "conversion"
         ]
@@ -1577,7 +1600,7 @@
       "name": "validation"
     },
     {
-      "description": "Convert clinical narrative to FHIR with a bring-your-own-key model, then score the result through the same validation cascade. Requires X-LLM-* credentials and the conversions:write scope.",
+      "description": "Convert clinical narrative to unvalidated FHIR with a bring-your-own-key model. Requires X-LLM-* credentials and the conversions:write scope.",
       "name": "conversion"
     },
     {

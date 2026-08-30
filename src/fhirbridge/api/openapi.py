@@ -20,10 +20,11 @@ from fhirbridge.version import CODE_VERSION
 BEARER_SCHEME: Final[str] = "bearerAuth"
 
 DESCRIPTION: Final[str] = """
-Convert unstructured clinical source material into validated, provenance-tagged
-FHIR R4 resources and return each generated result with a verification report
-and routing decision. Human review workflows are planned but are not included
-in this alpha release.
+Convert unstructured clinical source material into FHIR R4 resources, or validate
+FHIR resources through a separate verification endpoint. Narrative conversion
+returns unvalidated generated content; callers must submit it to `/v1/validate`
+before trusting it. Human review workflows are planned but are not included in
+this alpha release.
 
 **What this is not:** not a medical device, not clinical decision support, and not
 a FHIR repository. Nothing is inferred beyond what the source text asserts, and no
@@ -55,9 +56,8 @@ TAGS: Final[list[dict[str, Any]]] = [
     {
         "name": "conversion",
         "description": (
-            "Convert clinical narrative to FHIR with a bring-your-own-key model, then "
-            "score the result through the same validation cascade. Requires X-LLM-* "
-            "credentials and the conversions:write scope."
+            "Convert clinical narrative to unvalidated FHIR with a bring-your-own-key "
+            "model. Requires X-LLM-* credentials and the conversions:write scope."
         ),
     },
     {

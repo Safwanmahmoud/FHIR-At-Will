@@ -1,22 +1,39 @@
-"""Two-stage narrative-to-FHIR prompt support.
+"""Grounded entity extraction: the model-facing half of narrative-to-FHIR.
 
-The first model call extracts grounded ``resourceType`` / ``keyword`` / ``value``
-triples.  The second call receives those facts plus compact FHIR datatype guidance
-and assembles the final Bundle.  Keeping extraction separate from assembly limits
-the generator's vocabulary to elements observed in the validation corpus without
-pretending that a flat string is already valid FHIR.
+One model call extracts ``resourceType`` / ``instance`` / ``keyword`` / ``value``
+entities, constrained to the catalog below. Everything after that is deterministic
+and lives in :mod:`fhirbridge.fhir.assemble`, which needs no model at all.
+
+The split is drawn where a model earns its keep. Reading a sentence to find the
+facts, and recognizing that two of them describe the same measurement, requires
+language understanding. Choosing the FHIR datatype for a fact does not, and a model
+asked to do it will occasionally invent a code or nest a string where an object
+belongs.
+
+``instance`` is what makes the deterministic half possible. Without it the stream
+is flat, and "blood pressure", "128/82 mmHg", "heart rate", "74/min" can only be
+paired by array order, which no model guarantees.
 """
 
 from __future__ import annotations
 
-import types
-from collections.abc import Iterable
-from typing import Any, Final, Union, get_args, get_origin
+import re
+from typing import Any, Final
 
 from fhirbridge.domain.errors import LlmSchemaViolationError
-from fhirbridge.fhir.resource_types import typed_model_for
 
 MAX_EXTRACTED_ENTITIES: Final[int] = 500
+
+ENTITY_FIELDS: Final[frozenset[str]] = frozenset({"resourceType", "instance", "keyword", "value"})
+
+_INSTANCE_SLUG: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+"""Bounded lowercase slug.
+
+Constrained rather than free text for two reasons: it caps what a model can put in
+a grouping key, and it discourages the key from carrying a name. The slug never
+reaches a log or an identifier -- entry ``fullUrl`` values are hashes of it -- but
+narrowing the shape keeps that guarantee cheap to hold.
+"""
 
 RESOURCE_DESCRIPTIONS: Final[dict[str, str]] = {
     "AllergyIntolerance": (
@@ -354,18 +371,6 @@ OBSERVED_RESOURCE_KEYS: Final[dict[str, frozenset[str]]] = {
     ),
 }
 
-DATATYPE_LEGEND: Final[str] = """\
-HumanName: object with family string, given string array, prefix string array, suffix string array
-CodeableConcept: object with optional coding array and/or text string
-Coding: object with system, code, and display strings; omit system/code unless source supplies them
-Reference: object with reference and/or display strings
-Quantity: object with numeric value and optional unit, system, and code strings
-Period: object with start and/or end ISO 8601 strings
-Address: object with line string array and optional city, state, postalCode, country strings
-Identifier: object with optional system and value strings
-ContactPoint: object with system, value, and optional use strings
-Annotation: object with text string and optional time string"""
-
 
 def resource_catalog_text() -> str:
     """Catalog used by the grounded extraction call."""
@@ -381,34 +386,13 @@ def resource_catalog_text() -> str:
     )
 
 
-def resource_field_reference(resource_types: Iterable[str]) -> str:
-    """Observed element names plus typed-model datatype hints for generation."""
-    sections: list[str] = []
-    for resource_type in sorted(set(resource_types)):
-        keys = OBSERVED_RESOURCE_KEYS.get(resource_type)
-        if keys is None:
-            continue
-        model = typed_model_for(resource_type)
-        fields = (
-            {
-                str(field.alias or name): field
-                for name, field in model.model_fields.items()
-                if not name.endswith("__ext")
-            }
-            if model is not None
-            else {}
-        )
-        lines = [f"{resource_type} fields:"]
-        for key in sorted(keys):
-            field = fields.get(key)
-            hint = _annotation_hint(field.annotation) if field is not None else "FHIR R4 element"
-            lines.append(f"  {key}: {hint}")
-        sections.append("\n".join(lines))
-    return "\n\n".join(sections)
-
-
 def parse_entities(payload: dict[str, Any]) -> list[dict[str, str]]:
-    """Validate and normalize the extraction call's output without echoing PHI."""
+    """Validate and normalize the extraction call's output without echoing PHI.
+
+    All-or-nothing on purpose. A model that returned one malformed entity was not
+    following the schema, and silently keeping the rest would hand assembly a
+    partial picture of the narrative while reporting nothing.
+    """
     raw_entities = payload.get("entities")
     if not isinstance(raw_entities, list):
         raise LlmSchemaViolationError("The extraction model did not return an entities array.")
@@ -417,78 +401,45 @@ def parse_entities(payload: dict[str, Any]) -> list[dict[str, str]]:
 
     entities: list[dict[str, str]] = []
     for raw in raw_entities:
-        if not isinstance(raw, dict) or set(raw) != {"resourceType", "keyword", "value"}:
+        if not isinstance(raw, dict) or set(raw) != ENTITY_FIELDS:
             raise LlmSchemaViolationError(
-                "Each extracted entity must contain only resourceType, keyword, and value."
+                "Each extracted entity must contain only resourceType, instance, keyword, "
+                "and value."
             )
-        resource_type = raw.get("resourceType")
-        keyword = raw.get("keyword")
-        value = raw.get("value")
-        if (
-            not isinstance(resource_type, str)
-            or not resource_type.strip()
-            or not isinstance(keyword, str)
-            or not keyword.strip()
-            or not isinstance(value, str)
-            or not value.strip()
-        ):
+        if any(not isinstance(raw[field], str) or not raw[field].strip() for field in raw):
             raise LlmSchemaViolationError("Extracted entity fields must be non-empty strings.")
+
+        resource_type = raw["resourceType"].strip()
+        instance = raw["instance"].strip()
+        keyword = raw["keyword"].strip()
+
         allowed = OBSERVED_RESOURCE_KEYS.get(resource_type)
         if allowed is None or keyword not in allowed:
             raise LlmSchemaViolationError(
                 "The extraction model returned a resource type or key outside the catalog."
             )
-        entities.append({"resourceType": resource_type, "keyword": keyword, "value": value})
+        if not _INSTANCE_SLUG.match(instance):
+            raise LlmSchemaViolationError(
+                "Each extracted entity's instance must be a lowercase slug of letters, "
+                "digits, and hyphens."
+            )
+        entities.append(
+            {
+                "resourceType": resource_type,
+                "instance": instance,
+                "keyword": keyword,
+                # The only field whose source wording is preserved verbatim.
+                "value": raw["value"],
+            }
+        )
     return entities
 
 
-def require_fhir_bundle(
-    payload: dict[str, Any], *, allowed_resource_types: Iterable[str]
-) -> dict[str, Any]:
-    """Require the generation call to return a collection Bundle of allowed types."""
-    if payload.get("resourceType") != "Bundle" or payload.get("type") != "collection":
-        raise LlmSchemaViolationError(
-            "The generation model did not return a FHIR collection Bundle."
-        )
-    entries = payload.get("entry")
-    if not isinstance(entries, list):
-        raise LlmSchemaViolationError("The generated Bundle has no entry array.")
-
-    allowed = set(allowed_resource_types)
-    for entry in entries:
-        if not isinstance(entry, dict) or not isinstance(entry.get("resource"), dict):
-            raise LlmSchemaViolationError(
-                "Every generated Bundle entry must contain a resource object."
-            )
-        resource_type = entry["resource"].get("resourceType")
-        if resource_type not in allowed:
-            raise LlmSchemaViolationError(
-                "The generated Bundle contains a resource type unsupported by extraction."
-            )
-    return payload
-
-
-def _annotation_hint(annotation: Any) -> str:
-    origin = get_origin(annotation)
-    args = tuple(arg for arg in get_args(annotation) if arg is not type(None))
-    if origin in (Union, types.UnionType):
-        return " | ".join(_annotation_hint(arg) for arg in args)
-    if origin is list:
-        item = _annotation_hint(args[0]) if args else "any"
-        return f"array<{item}>"
-    if isinstance(annotation, type):
-        name = annotation.__name__
-        return name.removesuffix("Type")
-    return str(annotation).replace("typing.", "")
-
-
 __all__ = [
-    "DATATYPE_LEGEND",
+    "ENTITY_FIELDS",
     "MAX_EXTRACTED_ENTITIES",
     "OBSERVED_RESOURCE_KEYS",
     "RESOURCE_DESCRIPTIONS",
     "parse_entities",
-    "require_fhir_bundle",
     "resource_catalog_text",
-    "resource_field_reference",
 ]

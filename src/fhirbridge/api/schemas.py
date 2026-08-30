@@ -10,7 +10,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from fhirbridge.validation.models import IssueSeverity, ValidationLayer, ValidationReport
+from fhirbridge.fhir.assemble import AssemblyAction
+from fhirbridge.validation.models import IssueSeverity, ValidationLayer
 
 FhirResource = dict[str, Any]
 
@@ -72,8 +73,12 @@ class ConvertRequest(BaseModel):
     """Body of ``POST /v1/NAR2FHIR``.
 
     The clinical narrative is sent in the body, never a query parameter, because
-    it is PHI (principle 2.6). The generated bundle is validated before it is
-    returned, so the response is a report as much as a conversion.
+    it is PHI (principle 2.6). The generated bundle is returned unvalidated.
+
+    There is deliberately no ``profiles`` field. Assembly is deterministic and
+    validates nothing, so it cannot honor a profile request; stamping
+    ``meta.profile`` on that basis would be an unverified conformance claim. Pass
+    profiles to ``POST /v1/validate`` instead.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -81,26 +86,6 @@ class ConvertRequest(BaseModel):
     text: str = Field(
         min_length=1,
         description="The clinical narrative to convert into FHIR. Sent in the body as PHI.",
-    )
-    profiles: list[str] = Field(
-        default_factory=list,
-        description=(
-            "US Core (or other) profile canonical URLs to target and validate the "
-            "generated bundle against."
-        ),
-        examples=[["http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"]],
-    )
-    layers: list[ValidationLayer] | None = Field(
-        default=None,
-        description=(
-            "Restrict the post-generation cascade to these layers. Omit to run every "
-            "layer that can run. L6 fidelity and L7 coverage require source spans and "
-            "remain not-applicable until M3."
-        ),
-    )
-    max_terminology_checks: Annotated[int, Field(ge=1, le=2000)] = Field(
-        default=500,
-        description="Cap on distinct $validate-code calls for the L3 layer.",
     )
 
 
@@ -110,10 +95,10 @@ class LlmCallInfo(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider: str
-    model: str = Field(description="The model id reported by the final generation call.")
+    model: str = Field(description="The model id reported by the extraction call.")
     usage: dict[str, int] = Field(
         default_factory=dict,
-        description="Token counts aggregated across the endpoint's calls, when available.",
+        description="Token counts reported by the provider, when available.",
     )
     cost_usd: float | None = Field(
         default=None, description="Provider-reported cost of this call, when pricing is known."
@@ -122,15 +107,45 @@ class LlmCallInfo(BaseModel):
     qualification_tier: str = Field(description="This build's qualification tier for the model.")
 
 
+class AssemblyNote(BaseModel):
+    """One element that deterministic assembly could not simply place.
+
+    PHI-free by construction: an entry index, an element name, and a reason, never
+    a value. This list is how a caller separates a grounded element from one that
+    was filled in — a distinction the resource itself cannot express.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    entry_index: Annotated[int, Field(ge=0)] = Field(
+        description="Index into bundle.entry of the resource this note is about."
+    )
+    resource_type: str = Field(description="Resource type of that entry.")
+    element: str = Field(description="The FHIR element name this note concerns.")
+    action: AssemblyAction = Field(description="What assembly did about the element.")
+    detail: str = Field(
+        description="Why assembly took this action. Never contains an extracted value."
+    )
+
+
 class ConvertResponse(BaseModel):
     """Body of ``POST /v1/NAR2FHIR``."""
 
     model_config = ConfigDict(extra="forbid")
 
-    conversion_id: str = Field(description="Opaque id for this conversion; also on the report.")
+    conversion_id: str = Field(description="Opaque correlation id for this conversion.")
     bundle: FhirResource = Field(description="The generated FHIR R4 Bundle.")
-    report: ValidationReport = Field(
-        description="The L1-L5 validation of the generated bundle. Read status before trusting it."
+    validated: Literal[False] = Field(
+        default=False,
+        description=("Always false. Submit the Bundle to POST /v1/validate before trusting it."),
+    )
+    assembly: list[AssemblyNote] = Field(
+        default_factory=list,
+        description=(
+            "Every element assembly dropped, inferred, wired, or found in conflict. An "
+            "empty list means each extracted fact mapped cleanly onto a typed element. "
+            "Resources with an 'inferred' note also carry the machine-inferred tag."
+        ),
     )
     llm: LlmCallInfo
 
@@ -212,6 +227,7 @@ class CapabilitiesResponse(BaseModel):
 
 
 __all__ = [
+    "AssemblyNote",
     "CapabilitiesResponse",
     "ConvertRequest",
     "ConvertResponse",

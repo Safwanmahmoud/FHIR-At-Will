@@ -15,6 +15,7 @@ from fhirbridge.fhir.tags import (
     AI_DERIVED,
     ALL_TAGS,
     HUMAN_REVIEWED,
+    MACHINE_INFERRED,
     NONDETERMINISM_RISK,
     PROVENANCE_TAG_SYSTEM,
     UNQUALIFIED_MODEL,
@@ -27,11 +28,18 @@ def test_the_required_tags_exist_with_their_published_codes() -> None:
     assert HUMAN_REVIEWED == "human-reviewed"
     assert UNQUALIFIED_MODEL == "unqualified-model"
     assert NONDETERMINISM_RISK == "nondeterminism-risk"
+    assert MACHINE_INFERRED == "machine-inferred"
 
 
 def test_all_tags_lists_every_code_exactly_once() -> None:
     assert len(ALL_TAGS) == len(set(ALL_TAGS))
-    assert set(ALL_TAGS) == {AI_DERIVED, HUMAN_REVIEWED, UNQUALIFIED_MODEL, NONDETERMINISM_RISK}
+    assert set(ALL_TAGS) == {
+        AI_DERIVED,
+        HUMAN_REVIEWED,
+        UNQUALIFIED_MODEL,
+        NONDETERMINISM_RISK,
+        MACHINE_INFERRED,
+    }
 
 
 @pytest.mark.parametrize("code", ALL_TAGS)

@@ -8,6 +8,17 @@ semantic versioning after its first public release.
 - Prepare the repository for public contribution and coordinated disclosure.
 - Add grounded two-stage `/v1/NAR2FHIR` conversion.
 - Consolidate narrative-to-FHIR conversion on `/v1/NAR2FHIR`.
+- Return NAR2FHIR Bundles unvalidated; callers use `/v1/validate` separately.
+- Assemble NAR2FHIR Bundles deterministically instead of with a second model
+  call, so identical entities always produce an identical Bundle and no coded
+  concept, unit system, or date is ever synthesized. **Breaking:** extraction
+  entities now require an `instance` grouping key (`PROMPT_SET_VERSION` `v5.0.0`),
+  and `ConvertRequest.profiles` is removed because deterministic assembly
+  validates nothing and so cannot honor a profile request.
+- Report every element NAR2FHIR dropped, inferred, wired, or found in conflict in
+  a new PHI-free `assembly` list on the response.
+- Add the `machine-inferred` provenance tag for resources carrying a
+  FHIR-required value that the source did not state.
 - Add authenticated terminology search.
 
 ## 0.1.0 - 2026-08-28
