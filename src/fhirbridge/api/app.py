@@ -36,6 +36,7 @@ from fhirbridge.api.routers import (
     health,
     meta,
     validate,
+    voice,
 )
 from fhirbridge.config import Settings, get_settings
 from fhirbridge.fhir.validator_client import ValidatorClient
@@ -133,6 +134,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(meta.router)
     app.include_router(validate.router)
     app.include_router(convert.router)
+    app.include_router(voice.router)
     app.include_router(fhir_facade.router)
 
     install_openapi(app)

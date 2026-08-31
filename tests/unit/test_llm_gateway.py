@@ -7,6 +7,10 @@ router tests with a scripted gateway.
 
 from __future__ import annotations
 
+import base64
+from types import SimpleNamespace
+from typing import Any
+
 import pytest
 from pydantic import SecretStr
 
@@ -21,13 +25,16 @@ from fhirbridge.domain.errors import (
     LlmSchemaViolationError,
     ModelNotQualifiedError,
     PhiEgressNotAcknowledgedError,
+    UnreadableDocumentError,
 )
 from fhirbridge.llm.gateway import (
     LlmGateway,
     _extract_json_object,
+    _litellm_model,
     _map_llm_exception,
 )
-from fhirbridge.llm.invocation import LlmInvocation
+from fhirbridge.llm.invocation import LlmInvocation, SttInvocation
+from fhirbridge.llm.prompts import DICTATION_TRANSCRIBE
 
 
 def _settings(**overrides: object) -> Settings:
@@ -127,6 +134,134 @@ class TestAuthorize:
         tier = gateway.authorize(_inv(model="some/unknown-model"), sending_phi=True)
 
         assert tier is QualificationTier.UNQUALIFIED
+
+
+def _stt(
+    *,
+    model: str = "gemini-2.5-flash",
+    provider: str = "gemini",
+    base_url: str | None = None,
+    ack: bool = True,
+    language: str | None = None,
+) -> SttInvocation:
+    return SttInvocation(
+        provider=provider,
+        model=model,
+        api_key=SecretStr("gk-test"),
+        base_url=base_url,
+        phi_egress_acknowledged=ack,
+        language=language,
+    )
+
+
+def _stt_settings(**overrides: object) -> Settings:
+    return _settings(LLM_EGRESS_ALLOWLIST="generativelanguage.googleapis.com", **overrides)
+
+
+def _reply(content: str) -> SimpleNamespace:
+    """The minimal completion-response shape the gateway reads content from."""
+    message = SimpleNamespace(content=content)
+    choice = SimpleNamespace(message=message, finish_reason="stop")
+    return SimpleNamespace(choices=[choice], model="gemini/gemini-2.5-flash", usage=None)
+
+
+def _patch_acompletion(
+    monkeypatch: pytest.MonkeyPatch, content: str, captured: dict[str, Any]
+) -> None:
+    """Stand in for the litellm call so transcribe runs offline.
+
+    Patching the litellm entry point rather than the gateway keeps the real
+    kwargs-building path (:meth:`_call_kwargs`) under test; the gateway is a slotted
+    dataclass, so its bound methods cannot be patched anyway.
+    """
+    import litellm
+
+    async def fake_acompletion(**kwargs: Any) -> SimpleNamespace:
+        captured.update(kwargs)
+        return _reply(content)
+
+    monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
+
+
+class TestTranscribe:
+    async def test_it_transcribes_and_builds_an_input_audio_block(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        gateway = LlmGateway(settings=_stt_settings())
+        captured: dict[str, Any] = {}
+        _patch_acompletion(monkeypatch, "Patient denies chest pain.", captured)
+
+        result = await gateway.transcribe(_stt(), audio=b"AUDIO-BYTES", media_format="wav")
+
+        assert result.text == "Patient denies chest pain."
+        assert result.model == "gemini/gemini-2.5-flash"
+        assert "response_format" not in captured, "dictation is plain text, not JSON mode"
+        assert captured["model"] == "gemini/gemini-2.5-flash"
+        system, user = captured["messages"]
+        assert system == {"role": "system", "content": DICTATION_TRANSCRIBE.system}
+        audio_block = user["content"][-1]
+        assert audio_block["type"] == "input_audio"
+        assert audio_block["input_audio"]["format"] == "wav"
+        expected_data = base64.b64encode(b"AUDIO-BYTES").decode("ascii")
+        assert audio_block["input_audio"]["data"] == expected_data
+
+    async def test_a_language_hint_is_passed_as_leading_text(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        gateway = LlmGateway(settings=_stt_settings())
+        captured: dict[str, Any] = {}
+        _patch_acompletion(monkeypatch, "bonjour", captured)
+
+        await gateway.transcribe(_stt(language="fr"), audio=b"x", media_format="mp3")
+
+        first_part = captured["messages"][1]["content"][0]
+        assert first_part["type"] == "text"
+        assert "fr" in first_part["text"]
+
+    async def test_empty_speech_is_an_unreadable_document(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        gateway = LlmGateway(settings=_stt_settings())
+        _patch_acompletion(monkeypatch, "   ", {})
+
+        with pytest.raises(UnreadableDocumentError):
+            await gateway.transcribe(_stt(), audio=b"x", media_format="wav")
+
+    async def test_it_does_not_apply_the_qualification_tier(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A speech-to-text model is not tier-ranked; the tier gate must not reject it."""
+        gateway = LlmGateway(settings=_stt_settings(MIN_QUALIFICATION_TIER="gold"))
+        _patch_acompletion(monkeypatch, "ok", {})
+
+        result = await gateway.transcribe(
+            _stt(model="whisper-does-not-rank"), audio=b"x", media_format="wav"
+        )
+
+        assert result.text == "ok"
+
+    async def test_a_host_off_the_allowlist_is_blocked(self) -> None:
+        gateway = LlmGateway(settings=_settings(LLM_EGRESS_ALLOWLIST="openrouter.ai"))
+
+        with pytest.raises(EgressBlockedError):
+            await gateway.transcribe(_stt(), audio=b"x", media_format="wav")
+
+    async def test_unacknowledged_phi_egress_is_refused(self) -> None:
+        gateway = LlmGateway(settings=_stt_settings())
+
+        with pytest.raises(PhiEgressNotAcknowledgedError):
+            await gateway.transcribe(_stt(ack=False), audio=b"x", media_format="wav")
+
+
+class TestLitellmModelId:
+    def test_gemini_gets_the_gemini_prefix(self) -> None:
+        assert _litellm_model(_stt(model="gemini-2.5-flash")) == "gemini/gemini-2.5-flash"
+
+    def test_an_already_prefixed_gemini_model_is_left_alone(self) -> None:
+        assert _litellm_model(_stt(model="gemini/gemini-2.5-pro")) == "gemini/gemini-2.5-pro"
+
+    def test_openrouter_still_gets_its_prefix(self) -> None:
+        assert _litellm_model(_inv(model="openai/gpt-4o-mini")) == "openrouter/openai/gpt-4o-mini"
 
 
 class TestExceptionMapping:

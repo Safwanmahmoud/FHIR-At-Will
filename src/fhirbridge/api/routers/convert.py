@@ -38,9 +38,10 @@ from fhirbridge.api.schemas import (
     LlmCallInfo,
 )
 from fhirbridge.domain.ids import IdPrefix, new_id
-from fhirbridge.fhir.assemble import AssemblyAction, assemble_bundle
-from fhirbridge.llm.nar2fhir import parse_entities
-from fhirbridge.llm.prompts import NARRATIVE_TO_ENTITIES
+from fhirbridge.fhir.assemble import AssembledBundle, AssemblyAction
+from fhirbridge.llm.conversion import convert_narrative
+from fhirbridge.llm.gateway import LlmResult
+from fhirbridge.llm.invocation import LlmInvocation
 from fhirbridge.llm.qualification import resolve_tier
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,35 @@ _LLM_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 }
 
 
+def assembly_notes_of(assembled: AssembledBundle) -> list[AssemblyNote]:
+    """Map the assembler's PHI-free notes onto the response schema.
+
+    Shared with the voice endpoint so both report assembly identically.
+    """
+    return [
+        AssemblyNote(
+            entry_index=note.entry_index,
+            resource_type=note.resource_type,
+            element=note.element,
+            action=note.action,
+            detail=note.detail,
+        )
+        for note in assembled.notes
+    ]
+
+
+def llm_call_info_of(extraction: LlmResult, invocation: LlmInvocation) -> LlmCallInfo:
+    """Build the extraction-call provenance shared by both conversion endpoints."""
+    return LlmCallInfo(
+        provider=invocation.provider,
+        model=extraction.model,
+        usage=extraction.usage,
+        cost_usd=float(extraction.cost_usd) if extraction.cost_usd is not None else None,
+        latency_ms=extraction.latency_ms,
+        qualification_tier=str(resolve_tier(invocation.model)),
+    )
+
+
 @router.post(
     "/NAR2FHIR",
     summary="Convert narrative to an unvalidated FHIR Bundle with grounded extraction (BYOK)",
@@ -77,13 +107,10 @@ async def nar2fhir(
     principal.require(Scope.CONVERSIONS_WRITE)
     conversion_id = new_id(IdPrefix.CONVERSION)
 
-    extraction = await gateway.complete_json(
-        invocation,
-        system_prompt=NARRATIVE_TO_ENTITIES.system,
-        user_prompt=NARRATIVE_TO_ENTITIES.render_user(narrative=body.text),
+    result = await convert_narrative(
+        body.text, gateway=gateway, invocation=invocation, conversion_id=conversion_id
     )
-    entities = parse_entities(extraction.resource)
-    assembled = assemble_bundle(entities, seed=conversion_id)
+    assembled = result.assembled
 
     logger.info(
         "conversion_completed",
@@ -93,8 +120,7 @@ async def nar2fhir(
             # construction, so their counts are safe to record.
             "conversion_id": conversion_id,
             "actor_id": principal.actor_id,
-            "model": extraction.model,
-            "entity_count": len(entities),
+            "model": result.extraction.model,
             "resource_count": len(assembled.bundle["entry"]),
             "inferred_count": sum(
                 1 for note in assembled.notes if note.action is AssemblyAction.INFERRED
@@ -109,25 +135,9 @@ async def nar2fhir(
         conversion_id=conversion_id,
         bundle=assembled.bundle,
         validated=False,
-        assembly=[
-            AssemblyNote(
-                entry_index=note.entry_index,
-                resource_type=note.resource_type,
-                element=note.element,
-                action=note.action,
-                detail=note.detail,
-            )
-            for note in assembled.notes
-        ],
-        llm=LlmCallInfo(
-            provider=invocation.provider,
-            model=extraction.model,
-            usage=extraction.usage,
-            cost_usd=float(extraction.cost_usd) if extraction.cost_usd is not None else None,
-            latency_ms=extraction.latency_ms,
-            qualification_tier=str(resolve_tier(invocation.model)),
-        ),
+        assembly=assembly_notes_of(assembled),
+        llm=llm_call_info_of(result.extraction, invocation),
     )
 
 
-__all__ = ["router"]
+__all__ = ["assembly_notes_of", "llm_call_info_of", "router"]

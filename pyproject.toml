@@ -79,6 +79,11 @@ notebook = [
   "ipykernel==7.3.0",
   "jupyterlab==4.6.3",
 ]
+# Not in `dev` or `notebook`: only the untracked manuscript under `paper/` needs a
+# plotting stack, and nothing in CI renders figures. Requires `notebook` to execute it.
+paper = [
+  "matplotlib==3.11.1",
+]
 
 [build-system]
 requires = ["hatchling==1.32.0"]
@@ -123,6 +128,7 @@ ignore = [
 # Printing is how a notebook communicates, and its cells share one namespace, so
 # reassigning a name across cells is idiomatic rather than a mistake.
 "notebooks/**" = ["T201", "E402", "F811"]
+"paper/**" = ["T201", "E402", "F811", "S311"]
 "src/fhirbridge/observability/logging.py" = ["T201"]
 
 [tool.ruff.lint.flake8-tidy-imports]

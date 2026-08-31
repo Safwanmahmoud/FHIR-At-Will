@@ -25,12 +25,13 @@ set, which production forbids (principle 2.6).
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import time
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, Final
+from typing import Any, Final, Protocol
 
 from fhirbridge.config import QualificationTier, Settings
 from fhirbridge.domain.errors import (
@@ -45,8 +46,10 @@ from fhirbridge.domain.errors import (
     LlmSchemaViolationError,
     ModelNotQualifiedError,
     PhiEgressNotAcknowledgedError,
+    UnreadableDocumentError,
 )
-from fhirbridge.llm.invocation import LlmInvocation
+from fhirbridge.llm.invocation import LlmInvocation, SttInvocation
+from fhirbridge.llm.prompts import DICTATION_TRANSCRIBE
 from fhirbridge.llm.qualification import resolve_tier
 
 logger = logging.getLogger(__name__)
@@ -56,7 +59,35 @@ _LOOPBACK: Final[frozenset[str]] = frozenset({"localhost", "127.0.0.1", "::1"})
 DEFAULT_MAX_TOKENS: Final[int] = 4096
 """Bounds the worst-case cost of a single completion when pricing is unknown."""
 
+DICTATION_MAX_TOKENS: Final[int] = 8192
+"""A transcript can be long; give dictation more room than a JSON extraction."""
+
 _LLM_CALL_TIMEOUT_S: Final[float] = 120.0
+
+
+class _ProviderCall(Protocol):
+    """The shape both the LLM and the dictation invocation share.
+
+    The transport helpers are written against this rather than a concrete type so
+    one code path drives both calls without either invocation type standing in for
+    the other where policy cares about the difference. Every member is read-only so
+    the frozen invocation dataclasses satisfy it.
+    """
+
+    @property
+    def provider(self) -> str: ...
+
+    @property
+    def model(self) -> str: ...
+
+    @property
+    def base_url(self) -> str | None: ...
+
+    @property
+    def extra_headers(self) -> dict[str, str]: ...
+
+    @property
+    def api_key(self) -> Any: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +102,21 @@ class LlmResult:
     finish_reason: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class DictationResult:
+    """The outcome of a speech-to-text call.
+
+    ``text`` is the transcript and is therefore PHI: it may be returned in a
+    response body but must never reach a log, metric, exception, or trace.
+    """
+
+    text: str
+    model: str
+    usage: dict[str, int] = field(default_factory=dict)
+    cost_usd: Decimal | None = None
+    latency_ms: int = 0
+
+
 @dataclass(slots=True)
 class LlmGateway:
     """Policy-enforcing entry point for every LLM call."""
@@ -80,30 +126,16 @@ class LlmGateway:
     # --- Policy (pure, pre-network) ---------------------------------------
 
     def authorize(self, invocation: LlmInvocation, *, sending_phi: bool) -> QualificationTier:
-        """Enforce every policy gate, returning the resolved qualification tier.
+        """Enforce every policy gate for a completion, returning the resolved tier.
 
         Raises the specific catalogue error for the first gate that fails.
         """
-        if not self.settings.provider_allowed(invocation.provider):
-            raise EgressBlockedError(
-                "This LLM provider is not permitted by server policy.",
-                safe_context={"provider": invocation.provider},
-            )
-
-        host = invocation.egress_host
-        self._check_egress(host)
-
-        if (
-            sending_phi
-            and self.settings.require_phi_egress_ack
-            and host not in _LOOPBACK
-            and not invocation.phi_egress_acknowledged
-        ):
-            raise PhiEgressNotAcknowledgedError(
-                "Set X-PHI-Egress-Acknowledged: true to send clinical content to an "
-                "external provider.",
-                safe_context={"host": host},
-            )
+        self._authorize_egress(
+            provider=invocation.provider,
+            host=invocation.egress_host,
+            sending_phi=sending_phi,
+            phi_acknowledged=invocation.phi_egress_acknowledged,
+        )
 
         tier = resolve_tier(invocation.model)
         if not tier.satisfies(self.settings.min_qualification_tier):
@@ -117,6 +149,36 @@ class LlmGateway:
                 },
             )
         return tier
+
+    def _authorize_egress(
+        self, *, provider: str, host: str, sending_phi: bool, phi_acknowledged: bool
+    ) -> None:
+        """The provider, egress-host, and PHI gates shared by every external call.
+
+        Deliberately excludes the qualification tier: that gate protects the model
+        that *interprets* clinical meaning. Transcription is a verbatim capture step,
+        and the tier registry does not rank speech-to-text models, so applying it
+        would reject every usable dictation model rather than express a real policy.
+        """
+        if not self.settings.provider_allowed(provider):
+            raise EgressBlockedError(
+                "This provider is not permitted by server policy.",
+                safe_context={"provider": provider},
+            )
+
+        self._check_egress(host)
+
+        if (
+            sending_phi
+            and self.settings.require_phi_egress_ack
+            and host not in _LOOPBACK
+            and not phi_acknowledged
+        ):
+            raise PhiEgressNotAcknowledgedError(
+                "Set X-PHI-Egress-Acknowledged: true to send clinical content to an "
+                "external provider.",
+                safe_context={"host": host},
+            )
 
     def _check_egress(self, host: str) -> None:
         if self.settings.local_only_mode:
@@ -165,11 +227,68 @@ class LlmGateway:
             finish_reason=_finish_reason(response),
         )
 
+    # --- Transcription ----------------------------------------------------
+
+    async def transcribe(
+        self,
+        invocation: SttInvocation,
+        *,
+        audio: bytes,
+        media_format: str,
+    ) -> DictationResult:
+        """Authorize and transcribe audio to plain text via a multimodal call.
+
+        Gemini and most current speech-to-text models take audio as an
+        ``input_audio`` content block on a chat completion rather than a Whisper-style
+        transcription endpoint, so the audio rides in the message as raw base64.
+
+        No token-budget pre-flight runs here: audio is priced by duration, not
+        tokens, and litellm's token counter raises on ``input_audio`` blocks. The
+        completion cost is still recorded from the response.
+        """
+        self._authorize_egress(
+            provider=invocation.provider,
+            host=invocation.egress_host,
+            sending_phi=True,
+            phi_acknowledged=invocation.phi_egress_acknowledged,
+        )
+        encoded = base64.b64encode(audio).decode("ascii")
+        audio_block: dict[str, Any] = {
+            "type": "input_audio",
+            "input_audio": {"data": encoded, "format": media_format},
+        }
+        user_content: list[dict[str, Any]] = [audio_block]
+        if invocation.language:
+            user_content.insert(
+                0,
+                {"type": "text", "text": f"The spoken language is {invocation.language}."},
+            )
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": DICTATION_TRANSCRIBE.system},
+            {"role": "user", "content": user_content},
+        ]
+
+        response, latency_ms = await self._acompletion(
+            invocation, messages, max_tokens=DICTATION_MAX_TOKENS, json_mode=False
+        )
+        text = _first_content(response).strip()
+        if not text:
+            raise UnreadableDocumentError(
+                "The dictation model returned no transcribable speech from the audio."
+            )
+        return DictationResult(
+            text=text,
+            model=_response_model(response, invocation),
+            usage=_usage(response),
+            cost_usd=_completion_cost(response),
+            latency_ms=latency_ms,
+        )
+
     # --- Provider transport (lazy litellm) --------------------------------
 
     async def _acompletion(
         self,
-        invocation: LlmInvocation,
+        invocation: _ProviderCall,
         messages: list[dict[str, Any]],
         *,
         max_tokens: int,
@@ -202,7 +321,7 @@ class LlmGateway:
 
     def _call_kwargs(
         self,
-        invocation: LlmInvocation,
+        invocation: _ProviderCall,
         messages: list[dict[str, Any]],
         *,
         max_tokens: int,
@@ -264,16 +383,20 @@ class LlmGateway:
         return Decimal(str(total))
 
 
-def _litellm_model(invocation: LlmInvocation) -> str:
+def _litellm_model(invocation: _ProviderCall) -> str:
     """The model id litellm expects.
 
-    OpenRouter is addressed through litellm's ``openrouter/`` routing prefix; for
-    any other provider the caller is expected to pass a litellm-compatible model
-    id (for example ``anthropic/claude-3.5-sonnet`` or ``gpt-4o``).
+    OpenRouter is addressed through litellm's ``openrouter/`` prefix, and Google AI
+    Studio through the ``gemini/`` prefix; for any other provider the caller is
+    expected to pass a litellm-compatible model id (for example
+    ``anthropic/claude-3.5-sonnet``, ``gpt-4o``, or ``groq/whisper-large-v3``).
     """
-    if invocation.provider == "openrouter" and not invocation.model.startswith("openrouter/"):
-        return f"openrouter/{invocation.model}"
-    return invocation.model
+    model = invocation.model
+    if invocation.provider == "openrouter" and not model.startswith("openrouter/"):
+        return f"openrouter/{model}"
+    if invocation.provider == "gemini" and not model.startswith(("gemini/", "vertex_ai/")):
+        return f"gemini/{model}"
+    return model
 
 
 def _normalize_host(entry: str) -> str:
@@ -303,7 +426,7 @@ def _finish_reason(response: Any) -> str | None:
     return reason if isinstance(reason, str) else None
 
 
-def _response_model(response: Any, invocation: LlmInvocation) -> str:
+def _response_model(response: Any, invocation: _ProviderCall) -> str:
     model = getattr(response, "model", None)
     return model if isinstance(model, str) and model else invocation.model
 
@@ -402,6 +525,8 @@ def _map_llm_exception(exc: Exception) -> FhirbridgeError | None:
 
 __all__ = [
     "DEFAULT_MAX_TOKENS",
+    "DICTATION_MAX_TOKENS",
+    "DictationResult",
     "LlmGateway",
     "LlmResult",
 ]

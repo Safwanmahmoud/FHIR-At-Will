@@ -56,8 +56,9 @@ TAGS: Final[list[dict[str, Any]]] = [
     {
         "name": "conversion",
         "description": (
-            "Convert clinical narrative to unvalidated FHIR with a bring-your-own-key "
-            "model. Requires X-LLM-* credentials and the conversions:write scope."
+            "Convert clinical narrative, or dictated audio, to unvalidated FHIR with a "
+            "bring-your-own-key model. Requires X-LLM-* credentials (and X-STT-* for "
+            "audio) and the conversions:write scope."
         ),
     },
     {

@@ -28,6 +28,17 @@ semantic versioning after its first public release.
   grouping.
 - Add the `machine-inferred` provenance tag for resources carrying a
   FHIR-required value that the source did not state.
+- Add `POST /v1/VOICE2FHIR`: transcribe dictated clinical audio, then run it
+  through the same grounded extraction and deterministic assembly as
+  `/v1/NAR2FHIR`. Dictation is a separate BYOK call carrying `X-STT-*`
+  credentials (Gemini by default; litellm cannot transcribe through OpenRouter),
+  routed through the same provider, egress-allowlist, and PHI-acknowledgement
+  gates but not the qualification tier, which ranks reasoning models rather than
+  transcribers. Audio is uploaded as multipart and never logged; the transcript
+  is returned in the response body so a reviewer can catch a mishearing before
+  trusting the Bundle. The transport guard now also refuses `X-STT-API-Key` over
+  plaintext HTTP, and the verbatim dictation prompt is pinned
+  (`PROMPT_SET_VERSION` `v5.2.0`).
 - Add authenticated terminology search.
 
 ## 0.1.0 - 2026-08-28

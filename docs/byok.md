@@ -10,6 +10,13 @@ request. `X-LLM-Base-Url` and `X-LLM-Extra-Headers` are optional and remain subj
 to egress policy. Do not place credentials in URLs, notebooks, source files, logs,
 or issue reports.
 
+`POST /v1/VOICE2FHIR` makes a second, independent BYOK call to transcribe audio and
+takes its own `X-STT-Provider`, `X-STT-Model`, `X-STT-API-Key`, and optional
+`X-STT-Base-Url`, `X-STT-Extra-Headers`, and `X-STT-Language`. It is separate because
+litellm cannot transcribe through OpenRouter, so the dictation provider (Gemini by
+default) is usually not the extraction provider. Both calls obey every gate below;
+the single `X-PHI-Egress-Acknowledged` header covers both hops.
+
 ## Transport security
 
 Provider keys and FHIR API keys must travel over TLS. Plain HTTP is refused
@@ -21,7 +28,9 @@ hatch and is forbidden when `FHIRBRIDGE_ENV=production`.
 External hosts must appear in `LLM_EGRESS_ALLOWLIST`. An empty list blocks
 external calls. `LOCAL_ONLY_MODE=true` restricts calls to loopback endpoints
 and overrides external allowlisting. Provider ids can be narrowed with
-`LLM_ALLOWED_PROVIDERS`.
+`LLM_ALLOWED_PROVIDERS`. Dictation is governed by the same lists, so a voice
+provider's host must also be allowlisted (Gemini is
+`generativelanguage.googleapis.com`) and its provider id permitted.
 
 ## PHI egress
 

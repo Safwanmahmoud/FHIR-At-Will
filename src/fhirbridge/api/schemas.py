@@ -150,6 +150,47 @@ class ConvertResponse(BaseModel):
     llm: LlmCallInfo
 
 
+class DictationCallInfo(BaseModel):
+    """Provenance for the speech-to-text call. No audio or transcript (principle 2.6).
+
+    Carries no qualification tier: dictation is a verbatim capture step and the tier
+    registry ranks clinical-reasoning models, not transcription models, so a tier
+    here would be a claim the build does not make.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str
+    model: str = Field(description="The model id reported by the transcription call.")
+    usage: dict[str, int] = Field(
+        default_factory=dict,
+        description="Token counts reported by the provider, when available.",
+    )
+    cost_usd: float | None = Field(
+        default=None, description="Provider-reported cost of this call, when pricing is known."
+    )
+    latency_ms: int = 0
+
+
+class VoiceConvertResponse(ConvertResponse):
+    """Body of ``POST /v1/VOICE2FHIR``.
+
+    Everything ``POST /v1/NAR2FHIR`` returns, plus the transcript the model heard
+    and that call's provenance. The transcript is returned on purpose: dictation can
+    mishear a clinically decisive word (``no chest pain`` becoming ``chest pain``),
+    and a reviewer cannot catch that from the Bundle alone. It is PHI, so it appears
+    only in this response body, never in a log, URL, or metric.
+    """
+
+    transcript: str = Field(
+        description=(
+            "The verbatim transcript the dictation model produced, which was the input to "
+            "extraction. Review it against the audio before trusting the Bundle."
+        )
+    )
+    transcription: DictationCallInfo
+
+
 class VersionResponse(BaseModel):
     """Body of ``GET /version`` — the pins required by principle 2.8."""
 
@@ -233,9 +274,11 @@ __all__ = [
     "ConvertResponse",
     "DependencyHealthResponse",
     "DependencyStatus",
+    "DictationCallInfo",
     "LiveResponse",
     "LlmCallInfo",
     "ReadyResponse",
     "ValidateRequest",
     "VersionResponse",
+    "VoiceConvertResponse",
 ]

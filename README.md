@@ -47,6 +47,7 @@ The hosted playground supports:
 | Terminology validation within the validation cascade | Implemented |
 | Clinical plausibility rules | Implemented |
 | Grounded BYOK narrative extraction with deterministic FHIR assembly (`/v1/NAR2FHIR`) | Implemented |
+| Dictated-audio conversion via speech-to-text (`/v1/VOICE2FHIR`) | Implemented |
 | FHIR `OperationOutcome` validation response | Implemented |
 | API-key authentication and tenant-aware PostgreSQL RLS | Implemented |
 | JSON logs, Prometheus metrics, and OpenTelemetry hooks | Implemented |
@@ -435,6 +436,68 @@ The model must support structured JSON output. Prose, truncated JSON, or output 
 the required schema returns `422 llm-schema-violation`. Model availability and
 capabilities vary by provider.
 
+## VOICE2FHIR: convert dictated audio to FHIR
+
+`POST /v1/VOICE2FHIR` is `NAR2FHIR` with a transcription step in front. It transcribes
+dictated clinical audio verbatim, then runs the transcript through the exact same
+grounded extraction and deterministic assembly, so nothing about the conversion changes
+because the narrative arrived as speech. It returns everything `NAR2FHIR` does, plus:
+
+- `transcript` — the verbatim text the model heard, and the input to extraction; and
+- `transcription` — the dictation call's provider, model, token, cost, and latency.
+
+The transcript is returned on purpose. Dictation can mishear a clinically decisive word
+(`no chest pain` becoming `chest pain`), and a reviewer cannot catch that from the Bundle
+alone. Read it against the audio before trusting the result.
+
+Dictation is a **separate** BYOK call. litellm cannot transcribe through OpenRouter, so
+audio goes to a speech-to-text provider (Gemini by default, also OpenAI, Groq, WatsonX,
+...) on its own key, supplied in `X-STT-*` headers alongside the `X-LLM-*` extraction
+headers. Both calls pass the same provider, egress-allowlist, and PHI-acknowledgement
+gates; the qualification tier is not applied to dictation, because that gate ranks models
+that reason over clinical meaning, not ones that transcribe. Add the dictation provider's
+host to `LLM_EGRESS_ALLOWLIST` (Gemini is `generativelanguage.googleapis.com`).
+
+| Header | Purpose |
+|---|---|
+| `X-STT-Provider` | Speech-to-text provider id; defaults to `gemini` |
+| `X-STT-Model` | Provider transcription model id; required |
+| `X-STT-API-Key` | Caller-owned provider key; required |
+| `X-STT-Base-Url` | Optional endpoint override |
+| `X-STT-Extra-Headers` | Optional JSON object of provider headers |
+| `X-STT-Language` | Optional spoken-language hint |
+
+The audio is uploaded as `multipart/form-data` (never a query parameter) and, like the
+transcript, never reaches a log. Example:
+
+```python
+with open("dictation.wav", "rb") as audio:
+    response = httpx.post(
+        f"{base_url}/v1/VOICE2FHIR",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "X-LLM-Provider": "openrouter",
+            "X-LLM-Model": "openai/gpt-4.1-nano",
+            "X-LLM-API-Key": "sk-or-...",  # your extraction key
+            "X-STT-Provider": "gemini",
+            "X-STT-Model": "gemini-2.5-flash",
+            "X-STT-API-Key": "...",  # your dictation key; never commit it
+            "X-PHI-Egress-Acknowledged": "true",
+        },
+        files={"audio": ("dictation.wav", audio, "audio/wav")},
+        timeout=300,
+    )
+response.raise_for_status()
+result = response.json()
+
+# Verify the dictation before trusting anything built from it.
+print(result["transcript"])
+```
+
+Supported audio formats are wav, mp3, m4a/mp4, aac, flac, ogg/opus, aiff, and webm; other
+uploads return `415`. Audio above `MAX_UPLOAD_BYTES` returns `413`, and audio with no
+discernible speech returns `422`. `/v1/VOICE2FHIR` requires the `conversions:write` scope.
+
 ## API surface
 
 ### Public
@@ -460,8 +523,9 @@ capabilities vary by provider.
 | `POST` | `/v1/validate` | Structured validation report |
 | `POST` | `/v1/validate/outcome` | Validation as `OperationOutcome` |
 | `POST` | `/v1/NAR2FHIR` | Grounded BYOK extraction, deterministic FHIR assembly (unvalidated) |
+| `POST` | `/v1/VOICE2FHIR` | Transcribe dictated audio, then convert as `/v1/NAR2FHIR` (unvalidated) |
 
-`/v1/NAR2FHIR` requires the `conversions:write` scope.
+`/v1/NAR2FHIR` and `/v1/VOICE2FHIR` require the `conversions:write` scope.
 
 ## Fail-closed behavior
 
@@ -565,7 +629,7 @@ notebook outputs are persisted in the file.
 |---|---|
 | `src/fhirbridge/api/` | FastAPI app, auth, schemas, middleware, and routers |
 | `src/fhirbridge/validation/` | Cascade orchestration, reports, and rule packs |
-| `src/fhirbridge/llm/` | BYOK gateway, policy gates, qualification, and prompts |
+| `src/fhirbridge/llm/` | BYOK gateway (completion and dictation), policy gates, qualification, extraction rules, the shared narrative-to-FHIR pipeline, and prompts |
 | `src/fhirbridge/fhir/` | Typed models, deterministic Bundle assembly, `OperationOutcome`, validator client |
 | `src/fhirbridge/terminology/` | Terminology client and result models |
 | `src/fhirbridge/storage/` | SQLAlchemy models, tenant sessions, and RLS checks |
@@ -574,6 +638,7 @@ notebook outputs are persisted in the file.
 | `alembic/` | Database migrations |
 | `scripts/bootstrap.py` | App-role, tenant, and API-key provisioning |
 | `tests/` | Unit, contract, security, and integration suites |
+| `notebooks/` | Executable API smoke test and a step-by-step walkthrough of `/v1/NAR2FHIR` |
 
 ## Roadmap
 

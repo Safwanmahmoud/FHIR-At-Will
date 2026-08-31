@@ -19,6 +19,18 @@ operator decision and does not imply that output is safe. Every generated
 Bundle is returned unvalidated and must be submitted separately to
 `POST /v1/validate` before it is trusted.
 
+`/v1/VOICE2FHIR` adds a speech-to-text call before extraction, on a separate
+provider and key (`X-STT-*`). It requires a model that accepts audio input;
+litellm cannot transcribe through OpenRouter, so the extraction provider is
+usually not the dictation provider. The qualification tier is not applied to the
+dictation call — it ranks models that reason over clinical meaning, not ones that
+transcribe — so the operator, not this build, is responsible for choosing an
+accurate transcriber. A transcription error is a silent, upstream corruption:
+the extractor and assembler faithfully convert whatever words they are given, and
+a dropped `no` or a misheard dose cannot be recovered downstream. The verbatim
+`transcript` is returned for exactly this reason and must be checked against the
+audio before the Bundle is trusted.
+
 Provider availability, context limits, pricing, content filters, and supported
 parameters are not stable API contracts of FHIR at Will. Set
 `MAX_COST_USD_PER_CONVERSION` to bound individual requests, and treat provider

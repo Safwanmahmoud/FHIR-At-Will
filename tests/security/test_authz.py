@@ -107,6 +107,22 @@ async def test_llm_key_over_plaintext_http_is_rejected(
     assert "sk-would-be-leaked-on-the-wire" not in response.text
 
 
+async def test_stt_key_over_plaintext_http_is_rejected(
+    plaintext_client: httpx.AsyncClient,
+) -> None:
+    """A dictation key is a credential too, so the transport guard must cover it."""
+    response = await plaintext_client.post(
+        "/v1/validate",
+        json={"resource": {"resourceType": "Patient"}},
+        headers={"X-STT-Api-Key": "gk-would-be-leaked-on-the-wire"},
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["issue"][0]["details"]["coding"][0]["code"] == "insecure-transport"
+    assert "gk-would-be-leaked-on-the-wire" not in response.text
+
+
 async def test_forwarded_proto_https_is_honoured(
     plaintext_client: httpx.AsyncClient, all_dependencies_healthy: None
 ) -> None:

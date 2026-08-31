@@ -61,8 +61,28 @@ NARRATIVE_TO_ENTITIES: Final[PromptTemplate] = PromptTemplate(
     ),
 )
 
+DICTATION_TRANSCRIBE: Final[PromptTemplate] = PromptTemplate(
+    id="voice2fhir_dictation_transcribe",
+    system=(
+        "You are a medical dictation transcriber. Transcribe the supplied audio verbatim "
+        "into plain text.\n\n"
+        "Output only the words that were spoken. Do not translate, summarize, paraphrase, "
+        "correct, or add any clinical interpretation, and do not add speaker labels, "
+        "timestamps, headings, or commentary of your own.\n\n"
+        "Preserve clinically decisive words exactly, negation and quantities above all: "
+        "`no`, `not`, `denies`, `without`, and every number and unit change the meaning of "
+        "a chart and must never be dropped or altered. If a stretch of audio is "
+        "unintelligible, write `[inaudible]` rather than guessing at the words. If there is "
+        "no discernible speech, return an empty string."
+    ),
+    # The audio is supplied by the gateway as a separate content part, not through
+    # this template, so there is nothing to interpolate here.
+    user_template="",
+)
+
 PROMPT_SET: Final[dict[str, PromptTemplate]] = {
     NARRATIVE_TO_ENTITIES.id: NARRATIVE_TO_ENTITIES,
+    DICTATION_TRANSCRIBE.id: DICTATION_TRANSCRIBE,
 }
 
 
@@ -84,6 +104,7 @@ def prompt_set_fingerprint() -> str:
 
 
 __all__ = [
+    "DICTATION_TRANSCRIBE",
     "NARRATIVE_TO_ENTITIES",
     "PROMPT_SET",
     "PROMPT_SET_VERSION",

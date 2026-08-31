@@ -28,8 +28,8 @@ from fhirbridge.fhir.validator_client import (
     ValidatorIssue,
     ValidatorOutcome,
 )
-from fhirbridge.llm.gateway import LlmResult
-from fhirbridge.llm.invocation import LlmInvocation
+from fhirbridge.llm.gateway import DictationResult, LlmResult
+from fhirbridge.llm.invocation import LlmInvocation, SttInvocation
 from fhirbridge.terminology.models import (
     Coding,
     ExpansionResult,
@@ -209,6 +209,10 @@ class FakeLlmGateway:
     model: str = "openrouter/openai/gpt-4o-mini"
     error: BaseException | None = None
     complete_calls: list[tuple[str, str]] = field(default_factory=list)
+    transcript: str = "Patient reports feeling well."
+    stt_model: str = "gemini/gemini-2.5-flash"
+    transcribe_error: BaseException | None = None
+    transcribe_calls: list[tuple[str, int]] = field(default_factory=list)
 
     def authorize(self, invocation: LlmInvocation, *, sending_phi: bool) -> None:
         del invocation, sending_phi
@@ -234,6 +238,25 @@ class FakeLlmGateway:
             cost_usd=Decimal("0.0001"),
             latency_ms=5,
             finish_reason="stop",
+        )
+
+    async def transcribe(
+        self,
+        invocation: SttInvocation,
+        *,
+        audio: bytes,
+        media_format: str,
+    ) -> DictationResult:
+        del invocation
+        self.transcribe_calls.append((media_format, len(audio)))
+        if self.transcribe_error is not None:
+            raise self.transcribe_error
+        return DictationResult(
+            text=self.transcript,
+            model=self.stt_model,
+            usage={"prompt_tokens": 5, "completion_tokens": 15, "total_tokens": 20},
+            cost_usd=Decimal("0.00005"),
+            latency_ms=7,
         )
 
 

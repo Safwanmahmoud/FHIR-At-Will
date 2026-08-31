@@ -53,6 +53,21 @@
         "title": "AssemblyNote",
         "type": "object"
       },
+      "Body_voice2fhir_v1_VOICE2FHIR_post": {
+        "properties": {
+          "audio": {
+            "contentMediaType": "application/octet-stream",
+            "description": "The dictated clinical audio to convert.",
+            "title": "Audio",
+            "type": "string"
+          }
+        },
+        "required": [
+          "audio"
+        ],
+        "title": "Body_voice2fhir_v1_VOICE2FHIR_post",
+        "type": "object"
+      },
       "CapabilitiesResponse": {
         "additionalProperties": false,
         "description": "Body of ``GET /v1/capabilities`` \u2014 what this build can actually do.",
@@ -320,6 +335,52 @@
           "status"
         ],
         "title": "DependencyStatus",
+        "type": "object"
+      },
+      "DictationCallInfo": {
+        "additionalProperties": false,
+        "description": "Provenance for the speech-to-text call. No audio or transcript (principle 2.6).\n\nCarries no qualification tier: dictation is a verbatim capture step and the tier\nregistry ranks clinical-reasoning models, not transcription models, so a tier\nhere would be a claim the build does not make.",
+        "properties": {
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Provider-reported cost of this call, when pricing is known.",
+            "title": "Cost Usd"
+          },
+          "latency_ms": {
+            "default": 0,
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "model": {
+            "description": "The model id reported by the transcription call.",
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "usage": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Token counts reported by the provider, when available.",
+            "title": "Usage",
+            "type": "object"
+          }
+        },
+        "required": [
+          "provider",
+          "model"
+        ],
+        "title": "DictationCallInfo",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -1014,6 +1075,58 @@
         ],
         "title": "VersionResponse",
         "type": "object"
+      },
+      "VoiceConvertResponse": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /v1/VOICE2FHIR``.\n\nEverything ``POST /v1/NAR2FHIR`` returns, plus the transcript the model heard\nand that call's provenance. The transcript is returned on purpose: dictation can\nmishear a clinically decisive word (``no chest pain`` becoming ``chest pain``),\nand a reviewer cannot catch that from the Bundle alone. It is PHI, so it appears\nonly in this response body, never in a log, URL, or metric.",
+        "properties": {
+          "assembly": {
+            "description": "Every element assembly dropped, inferred, wired, or found in conflict. An empty list means each extracted fact mapped cleanly onto a typed element. Resources with an 'inferred' note also carry the machine-inferred tag.",
+            "items": {
+              "$ref": "#/components/schemas/AssemblyNote"
+            },
+            "title": "Assembly",
+            "type": "array"
+          },
+          "bundle": {
+            "additionalProperties": true,
+            "description": "The generated FHIR R4 Bundle.",
+            "title": "Bundle",
+            "type": "object"
+          },
+          "conversion_id": {
+            "description": "Opaque correlation id for this conversion.",
+            "title": "Conversion Id",
+            "type": "string"
+          },
+          "llm": {
+            "$ref": "#/components/schemas/LlmCallInfo"
+          },
+          "transcript": {
+            "description": "The verbatim transcript the dictation model produced, which was the input to extraction. Review it against the audio before trusting the Bundle.",
+            "title": "Transcript",
+            "type": "string"
+          },
+          "transcription": {
+            "$ref": "#/components/schemas/DictationCallInfo"
+          },
+          "validated": {
+            "const": false,
+            "default": false,
+            "description": "Always false. Submit the Bundle to POST /v1/validate before trusting it.",
+            "title": "Validated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "conversion_id",
+          "bundle",
+          "llm",
+          "transcript",
+          "transcription"
+        ],
+        "title": "VoiceConvertResponse",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -1217,6 +1330,271 @@
           }
         ],
         "summary": "Convert narrative to an unvalidated FHIR Bundle with grounded extraction (BYOK)",
+        "tags": [
+          "conversion"
+        ]
+      }
+    },
+    "/v1/VOICE2FHIR": {
+      "post": {
+        "description": "Transcribe ``audio`` to text, then run the narrative-to-FHIR pipeline on it.",
+        "operationId": "post_VOICE2FHIR",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-Provider",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Provider"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-Model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Model"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-Base-Url",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Base-Url"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-LLM-Extra-Headers",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Llm-Extra-Headers"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-PHI-Egress-Acknowledged",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Phi-Egress-Acknowledged"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-STT-Provider",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Stt-Provider"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-STT-Model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Stt-Model"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-STT-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Stt-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-STT-Base-Url",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Stt-Base-Url"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-STT-Extra-Headers",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Stt-Extra-Headers"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-STT-Language",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Stt-Language"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_voice2fhir_v1_VOICE2FHIR_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceConvertResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Missing LLM or STT credentials, or a provider rejected the key."
+          },
+          "413": {
+            "description": "The audio exceeds the configured upload size limit."
+          },
+          "415": {
+            "description": "The uploaded file is not a recognized audio format."
+          },
+          "422": {
+            "description": "The audio yielded no transcribable speech, the model output could not be parsed, a model is not qualified, or the budget would be exceeded."
+          },
+          "429": {
+            "description": "A provider rate-limited the request. Retryable."
+          },
+          "451": {
+            "description": "A target provider host is blocked by egress policy."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Transcribe dictated audio and convert it to an unvalidated FHIR Bundle (BYOK)",
         "tags": [
           "conversion"
         ]
@@ -1600,7 +1978,7 @@
       "name": "validation"
     },
     {
-      "description": "Convert clinical narrative to unvalidated FHIR with a bring-your-own-key model. Requires X-LLM-* credentials and the conversions:write scope.",
+      "description": "Convert clinical narrative, or dictated audio, to unvalidated FHIR with a bring-your-own-key model. Requires X-LLM-* credentials (and X-STT-* for audio) and the conversions:write scope.",
       "name": "conversion"
     },
     {

@@ -10,13 +10,14 @@ from __future__ import annotations
 
 from fhirbridge.llm.extraction_rules import extraction_rules_text
 from fhirbridge.llm.prompts import (
+    DICTATION_TRANSCRIBE,
     NARRATIVE_TO_ENTITIES,
     PROMPT_SET,
     PROMPT_SET_VERSION,
     prompt_set_fingerprint,
 )
 
-PINNED_FINGERPRINT = "bf5e8aaaf80767027b40fbd295a575a470bc8b97ce499b7053e805b9bbf4535c"
+PINNED_FINGERPRINT = "b24932e90102a717cb300e8ab09f03c03d314458e94d4ba25e472704b2d4fb97"
 
 
 def test_the_prompt_set_has_not_drifted_from_its_pinned_hash() -> None:
@@ -33,6 +34,7 @@ def test_the_fingerprint_is_deterministic() -> None:
 def test_the_version_is_stamped_and_the_set_is_populated() -> None:
     assert PROMPT_SET_VERSION
     assert NARRATIVE_TO_ENTITIES.id in PROMPT_SET
+    assert DICTATION_TRANSCRIBE.id in PROMPT_SET
 
 
 def test_the_user_template_renders_the_narrative() -> None:
@@ -56,9 +58,22 @@ def test_extraction_forbids_identifying_detail_in_the_grouping_key() -> None:
     assert "must not contain a patient name" in system
 
 
-def test_no_generation_prompt_remains() -> None:
-    """Bundle assembly is deterministic; a second model call would reintroduce drift."""
-    assert len(PROMPT_SET) == 1
+def test_no_bundle_generation_prompt_remains() -> None:
+    """Bundle assembly is deterministic; a model call for it would reintroduce drift.
+
+    The set holds only the two model-facing prompts: grounded extraction and verbatim
+    dictation. Neither produces a Bundle.
+    """
+    assert set(PROMPT_SET) == {NARRATIVE_TO_ENTITIES.id, DICTATION_TRANSCRIBE.id}
+
+
+def test_the_dictation_prompt_protects_negation_and_refuses_to_interpret() -> None:
+    """A mistranscribed negation or number silently corrupts the chart."""
+    system = DICTATION_TRANSCRIBE.system
+
+    assert "verbatim" in system
+    assert "negation" in system
+    assert "interpretation" in system
 
 
 def test_the_extraction_rule_pack_is_embedded() -> None:

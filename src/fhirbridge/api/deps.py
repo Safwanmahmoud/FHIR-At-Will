@@ -29,7 +29,14 @@ from fhirbridge.llm.invocation import (
     HEADER_MODEL,
     HEADER_PHI_ACK,
     HEADER_PROVIDER,
+    HEADER_STT_API_KEY,
+    HEADER_STT_BASE_URL,
+    HEADER_STT_EXTRA_HEADERS,
+    HEADER_STT_LANGUAGE,
+    HEADER_STT_MODEL,
+    HEADER_STT_PROVIDER,
     LlmInvocation,
+    SttInvocation,
 )
 from fhirbridge.observability import context
 from fhirbridge.storage.session import privileged_session, tenant_session
@@ -132,6 +139,36 @@ async def get_llm_invocation(
 LlmInvocationDep = Annotated[LlmInvocation, Depends(get_llm_invocation)]
 
 
+async def get_stt_invocation(
+    x_stt_provider: Annotated[str | None, Header(alias=HEADER_STT_PROVIDER)] = None,
+    x_stt_model: Annotated[str | None, Header(alias=HEADER_STT_MODEL)] = None,
+    x_stt_api_key: Annotated[str | None, Header(alias=HEADER_STT_API_KEY)] = None,
+    x_stt_base_url: Annotated[str | None, Header(alias=HEADER_STT_BASE_URL)] = None,
+    x_stt_extra_headers: Annotated[str | None, Header(alias=HEADER_STT_EXTRA_HEADERS)] = None,
+    x_stt_language: Annotated[str | None, Header(alias=HEADER_STT_LANGUAGE)] = None,
+    x_phi_egress_ack: Annotated[str | None, Header(alias=HEADER_PHI_ACK)] = None,
+) -> SttInvocation:
+    """Parse the caller's dictation BYOK credentials out of the ``X-STT-*`` headers.
+
+    Separate from the extraction credentials because voice conversion sends audio to
+    a speech-to-text provider (Gemini, OpenAI, Groq, ...) that is typically not the
+    same provider extraction uses. The single ``X-PHI-Egress-Acknowledged`` header
+    covers both external hops.
+    """
+    return SttInvocation.from_headers(
+        provider=x_stt_provider,
+        model=x_stt_model,
+        api_key=x_stt_api_key,
+        base_url=x_stt_base_url,
+        extra_headers=x_stt_extra_headers,
+        phi_ack=x_phi_egress_ack,
+        language=x_stt_language,
+    )
+
+
+SttInvocationDep = Annotated[SttInvocation, Depends(get_stt_invocation)]
+
+
 async def get_principal(
     services: Services,
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
@@ -187,6 +224,7 @@ __all__ = [
     "Services",
     "SessionDep",
     "SettingsDep",
+    "SttInvocationDep",
     "TerminologyDep",
     "ValidatorDep",
     "get_llm_gateway",
@@ -194,5 +232,6 @@ __all__ = [
     "get_principal",
     "get_services",
     "get_session",
+    "get_stt_invocation",
     "require_scopes",
 ]

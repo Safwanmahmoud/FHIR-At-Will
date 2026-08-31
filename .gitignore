@@ -40,6 +40,10 @@ packages/fhir-cache/
 *.tgz
 *.jar
 
+# Draft manuscript, its figures, and anything else written about the method.
+# Unpublished work product: it stays local until it is published deliberately.
+paper/
+
 # Editors / OS
 .idea/
 .vscode/

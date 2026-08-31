@@ -439,6 +439,10 @@ class InsecureTransportError(DomainError):
     code = ErrorCode.INSECURE_TRANSPORT
 
 
+class UnreadableDocumentError(DomainError):
+    code = ErrorCode.UNREADABLE_DOCUMENT
+
+
 class InvalidFhirResourceError(DomainError):
     code = ErrorCode.INVALID_FHIR_RESOURCE
 
@@ -640,6 +644,7 @@ __all__ = [
     "SafeContext",
     "TerminologyUnavailableError",
     "UnauthenticatedError",
+    "UnreadableDocumentError",
     "UnsupportedFhirVersionError",
     "UnsupportedMediaTypeError",
     "UnsupportedResourceTypeError",

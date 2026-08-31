@@ -22,6 +22,14 @@ reproducible but is not evidence about the patient. `POST /v1/NAR2FHIR` reports
 every inferred element, and every element it could not ground, in the response's
 `assembly` list; that list is the record to review, not the tag alone.
 
+`POST /v1/VOICE2FHIR` transcribes dictated audio before conversion. Transcription
+is a silent failure surface: a dropped `no`, a misheard dose, or an added word
+becomes ground truth for extraction, and no downstream layer can recover it
+because the resource that results is faithful to the transcript, not the audio.
+The endpoint returns the verbatim `transcript` so a human can compare it against
+the recording; that comparison is a required review step, not a convenience, and
+provenance tags do not attest to transcription accuracy.
+
 Operators and downstream clients must:
 
 - inspect the complete validation report, including skipped checks;

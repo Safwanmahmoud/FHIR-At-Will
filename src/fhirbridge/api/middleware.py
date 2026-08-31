@@ -143,8 +143,16 @@ class LlmTransportGuardMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+_CREDENTIAL_HEADERS: Final[tuple[str, ...]] = (
+    "x-llm-api-key",
+    "x-llm-extra-headers",
+    "x-stt-api-key",
+    "x-stt-extra-headers",
+)
+
+
 def _carries_llm_credential(request: Request) -> bool:
-    return any(header in request.headers for header in ("x-llm-api-key", "x-llm-extra-headers"))
+    return any(header in request.headers for header in _CREDENTIAL_HEADERS)
 
 
 class AccessLogMiddleware(BaseHTTPMiddleware):
