@@ -5,6 +5,11 @@ Set `DEID_MODE=enforced` to replace detected identifiers with random,
 request-local typed tokens. The extraction result is parsed first, then tokens in
 entity values are restored locally before deterministic FHIR assembly.
 
+`POST /v1/deidentify` exposes the same enforced minimizer without making a model
+call. It returns the tokenized narrative and PHI-free processing evidence, and
+requires the `conversions:write` scope. The endpoint refuses requests unless
+`DEID_MODE=enforced`.
+
 This is a security control, not a HIPAA compliance determination. The service
 reports `residual_risk: not_assessed`; the covered entity remains responsible for
 the Safe Harbor "actual knowledge" condition, provider agreements, risk analysis,

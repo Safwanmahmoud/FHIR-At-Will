@@ -113,6 +113,27 @@ class KnownIdentifiers(BaseModel):
     device_identifiers: list[str] = Field(default_factory=list)
 
 
+class DeidentifyRequest(BaseModel):
+    """Body of ``POST /v1/deidentify``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(
+        min_length=1,
+        description="The clinical narrative to de-identify. It is PHI and belongs in the body.",
+    )
+    known_identifiers: KnownIdentifiers = Field(default_factory=KnownIdentifiers)
+
+
+class DeidentifyResponse(BaseModel):
+    """A minimized narrative and PHI-free processing evidence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(description="The narrative with detected identifiers replaced by tokens.")
+    deid: DeidInfo
+
+
 class LlmCallInfo(BaseModel):
     """Aggregate model-call provenance. No prompt or completion content (principle 2.6)."""
 
@@ -316,6 +337,8 @@ __all__ = [
     "ConvertRequest",
     "ConvertResponse",
     "DeidInfo",
+    "DeidentifyRequest",
+    "DeidentifyResponse",
     "DependencyHealthResponse",
     "DependencyStatus",
     "DictationCallInfo",

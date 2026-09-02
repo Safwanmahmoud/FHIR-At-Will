@@ -524,6 +524,7 @@ and audio with no discernible speech returns `422`. `/v1/VOICE2FHIR` requires th
 | `GET` | `/v1/igs` | Preloaded implementation guides |
 | `POST` | `/v1/validate` | Structured validation report |
 | `POST` | `/v1/validate/outcome` | Validation as `OperationOutcome` |
+| `POST` | `/v1/deidentify` | Replace detected narrative identifiers using the enforced de-identification profile |
 | `POST` | `/v1/NAR2FHIR` | Grounded BYOK extraction, deterministic FHIR assembly  |
 | `POST` | `/v1/VOICE2FHIR` | Transcribe dictated audio, then convert as `/v1/NAR2FHIR`  |
 

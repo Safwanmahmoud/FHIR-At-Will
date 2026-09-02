@@ -32,6 +32,7 @@ from fhirbridge.api.middleware import (
 from fhirbridge.api.openapi import install_openapi
 from fhirbridge.api.routers import (
     convert,
+    deidentify,
     fhir_facade,
     health,
     meta,
@@ -140,6 +141,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(meta.router)
     app.include_router(validate.router)
     app.include_router(convert.router)
+    app.include_router(deidentify.router)
     app.include_router(voice.router)
     app.include_router(fhir_facade.router)
 

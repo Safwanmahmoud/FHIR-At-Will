@@ -39,7 +39,6 @@ from fhirbridge.api.routers.convert import (
     llm_call_info_of,
 )
 from fhirbridge.api.schemas import (
-    ConvertRequest,
     DictationCallInfo,
     KnownIdentifiers,
     VoiceConvertResponse,
@@ -183,14 +182,13 @@ async def voice2fhir(
         raise InvalidRequestError("known_identifiers must be a valid JSON object.") from exc
 
     dictation = await gateway.transcribe(stt, audio=raw, media_format=media_format)
-    conversion_body = ConvertRequest(text=dictation.text, known_identifiers=declared)
     result = await convert_narrative(
         dictation.text,
         gateway=gateway,
         invocation=invocation,
         conversion_id=conversion_id,
         policy=DeidPolicy.from_settings(settings),
-        declared_identifiers=declared_identifiers_of(conversion_body),
+        declared_identifiers=declared_identifiers_of(declared),
     )
     assembled = result.assembled
 

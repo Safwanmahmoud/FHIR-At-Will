@@ -334,6 +334,46 @@
         "title": "DeidInfo",
         "type": "object"
       },
+      "DeidentifyRequest": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /v1/deidentify``.",
+        "properties": {
+          "known_identifiers": {
+            "$ref": "#/components/schemas/KnownIdentifiers"
+          },
+          "text": {
+            "description": "The clinical narrative to de-identify. It is PHI and belongs in the body.",
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "DeidentifyRequest",
+        "type": "object"
+      },
+      "DeidentifyResponse": {
+        "additionalProperties": false,
+        "description": "A minimized narrative and PHI-free processing evidence.",
+        "properties": {
+          "deid": {
+            "$ref": "#/components/schemas/DeidInfo"
+          },
+          "text": {
+            "description": "The narrative with detected identifiers replaced by tokens.",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "deid"
+        ],
+        "title": "DeidentifyResponse",
+        "type": "object"
+      },
       "DependencyHealthResponse": {
         "additionalProperties": false,
         "description": "Body of ``GET /v1/health/dependencies``.",
@@ -1821,6 +1861,66 @@
         "summary": "What this build can do, and what it cannot",
         "tags": [
           "platform"
+        ]
+      }
+    },
+    "/v1/deidentify": {
+      "post": {
+        "operationId": "post_deidentify",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeidentifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeidentifyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "De-identification is not enforced for this deployment, or the request is invalid."
+          },
+          "503": {
+            "description": "The required de-identification assets are unavailable."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "De-identify a clinical narrative with the configured deterministic layer",
+        "tags": [
+          "conversion"
         ]
       }
     },

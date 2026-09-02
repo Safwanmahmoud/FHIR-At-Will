@@ -37,6 +37,7 @@ from fhirbridge.api.schemas import (
     ConvertRequest,
     ConvertResponse,
     DeidInfo,
+    KnownIdentifiers,
     LlmCallInfo,
 )
 from fhirbridge.deid.detectors import DeclaredIdentifier
@@ -79,11 +80,11 @@ _DECLARED_FIELDS: dict[str, IdentifierClass] = {
 }
 
 
-def declared_identifiers_of(body: ConvertRequest) -> list[DeclaredIdentifier]:
+def declared_identifiers_of(known: KnownIdentifiers) -> list[DeclaredIdentifier]:
     return [
         DeclaredIdentifier(identifier_class=identifier_class, value=value)
         for field, identifier_class in _DECLARED_FIELDS.items()
-        for value in getattr(body.known_identifiers, field)
+        for value in getattr(known, field)
         if value.strip()
     ]
 
@@ -153,7 +154,7 @@ async def nar2fhir(
         invocation=invocation,
         conversion_id=conversion_id,
         policy=DeidPolicy.from_settings(settings),
-        declared_identifiers=declared_identifiers_of(body),
+        declared_identifiers=declared_identifiers_of(body.known_identifiers),
     )
     assembled = result.assembled
 
