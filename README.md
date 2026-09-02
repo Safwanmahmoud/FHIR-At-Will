@@ -33,10 +33,8 @@ checks, version provenance, and the final routing decision.
 
 The hosted playground supports:
 
-1. **Validate a resource** — submit a FHIR R4 resource or Bundle to the live
-   eight-layer cascade.
-2. **Narrative → FHIR** — bring an OpenRouter key and use `POST /v1/NAR2FHIR` to
-   generate an unvalidated FHIR Bundle, then submit it to `POST /v1/validate`.
+- **Narrative → FHIR** — bring an OpenRouter key and use `POST /v1/NAR2FHIR` to
+   generate a FHIR Bundle.
 
 ## What works today
 
