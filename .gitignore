@@ -43,6 +43,7 @@ packages/fhir-cache/
 # Draft manuscript, its figures, and anything else written about the method.
 # Unpublished work product: it stays local until it is published deliberately.
 paper/
+notebooks/
 
 # Editors / OS
 .idea/
