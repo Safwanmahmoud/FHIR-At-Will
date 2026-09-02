@@ -48,10 +48,10 @@ The hosted playground supports:
 | Dictated-audio conversion via speech-to-text (`/v1/VOICE2FHIR`) | Implemented |
 | FHIR `OperationOutcome` validation response | Implemented |
 | API-key authentication and tenant-aware PostgreSQL RLS | Implemented |
-| JSON logs, Prometheus metrics, and OpenTelemetry hooks | Implemented |
+| JSON logs, Prometheus metrics, and opt-in OpenTelemetry tracing | Implemented |
 | Persisted conversion jobs and source documents | Planned for M3 |
 | Source-span fidelity and coverage scoring | Planned for M3 |
-| Core API repair endpoint | Planned for M3 |
+| Core API normalize endpoint (`POST /v1/normalize`) | Planned for M3 |
 | Human review and delivery workflows | Planned for M4–M6 |
 
 The current build targets:
@@ -109,15 +109,12 @@ flowchart LR
     Cascade --> Rules[L5<br>versioned rule pack]
     Cascade --> Routing[L8 routing]
 
-    API -->|X-LLM-* BYOK headers| Gateway[LLM policy gateway]
+    API --> Convert[Grounded narrative conversion]
+    Convert -->|X-LLM-* / X-STT-* BYOK headers| Gateway[LLM policy gateway]
     Gateway -->|caller's key| Provider[LLM provider]
-    Gateway --> Cascade
-
-    API --> Agent[Craft agent loop]
-    Agent -->|tool calls| Gateway
-    Agent --> Tools[Deterministic tools<br>structural + terminology gated]
-    Tools --> Terminology
-    Agent -->|assembled Bundle| Cascade
+    Convert --> Extract[One structured extraction call]
+    Extract --> Assemble[Deterministic Bundle assembly]
+    Assemble -.->|separate /v1/validate request| Cascade
 
     API --> DB[(PostgreSQL<br>tenant RLS)]
     API --> Observability[Logs / metrics / traces]
@@ -131,10 +128,12 @@ security does not apply to that role.
 ## Deploy on Railway
 
 The repository includes a four-service Railway definition for the API, private
-validator sidecar, PostgreSQL, and Redis. See the
-[Railway template guide](docs/railway-template.md) for the generated-secret
-configuration, first API-key retrieval, sandbox safety boundary, and
-marketplace overview.
+validator sidecar, PostgreSQL, and Redis. It defaults to a staging sandbox with
+OpenRouter egress enabled and unqualified models allowed. On first deploy, save the
+one-time API key from the API service's pre-deploy logs. Applying the infrastructure
+definition requires Railway CLI `5.42.1` or newer. See the
+[Railway template guide](docs/railway-template.md) for generated-secret configuration,
+the sandbox safety boundary, and marketplace setup.
 
 The one-click marketplace button will be added here after the public template
 is published.
@@ -166,7 +165,11 @@ POSTGRES_PASSWORD=choose-an-owner-password
 APP_DB_PASSWORD=choose-a-different-app-password
 ```
 
-The API must use `APP_DB_PASSWORD`, never the PostgreSQL owner password.
+For Docker Compose, edit the variables under `.env.example`'s **Compose only**
+heading. Compose supplies its own internal `DATABASE_URL`, `REDIS_URL`, and
+`VALIDATOR_URL`; their host-oriented values in `.env` are for processes run directly
+with `uv`. The API connects as `APP_DB_USER` with `APP_DB_PASSWORD`, never as the
+PostgreSQL owner.
 
 ### 2. Provision the database and first API key
 
@@ -177,20 +180,21 @@ docker compose --profile setup run --rm bootstrap
 This applies migrations, creates the least-privileged application role, provisions a
 tenant, and prints an API key. The key is shown once; only its Argon2id hash is stored.
 The bootstrap key receives `documents:write`, `conversions:write`, `facts:read`, and
-`reviews:write`; it deliberately excludes PHI-read, submission, credential-management,
-and administrator scopes.
+`reviews:write`; it deliberately excludes `phi:read`, `reviews:submit`,
+`deliveries:write`, `credentials:write`, and `admin`.
 
 If that plaintext key is lost, issue a replacement for the existing tenant instead of
 running bootstrap again:
 
 ```bash
-DATABASE_URL=postgresql+asyncpg://owner:...@host/db \
-  uv run python scripts/issue_api_key.py --tenant-slug local-development
+docker compose --profile setup run --rm --entrypoint python bootstrap \
+  scripts/issue_api_key.py --only-tenant --scope conversions:write
 ```
 
-The replacement is unscoped by default, which is sufficient for validation and the API
-smoke test. Repeat `--scope <scope>` to grant additional permissions. The command must
-use the schema-owner connection, prints the new key once, and does not revoke old keys.
+Without `--scope`, a replacement is unscoped and can call validation only. The
+`conversions:write` scope is required for NAR2FHIR and VOICE2FHIR; repeat `--scope`
+for additional permissions. The command uses the bootstrap service's schema-owner
+connection, prints the new key once, and does not revoke old keys.
 
 ### 3. Start the stack
 
@@ -200,8 +204,9 @@ docker compose ps
 ```
 
 The API is available at `http://localhost:8000`. PostgreSQL, Redis, and the validator
-remain private to the Compose network. Redis is provisioned for future asynchronous M3
-jobs but is not used by the current synchronous M0–M2 request path.
+remain private to the Compose network. Redis is not used by the current synchronous
+M0–M2 request path, but Compose still requires it to become healthy before starting
+the API.
 
 ### 4. Check the deployment
 
@@ -213,7 +218,8 @@ curl http://localhost:8000/version
 
 - `/livez` checks the API process.
 - `/readyz` checks PostgreSQL isolation, the validator, and terminology.
-- `/version` returns the code, FHIR, IG, and validator versions stamped into reports.
+- `/version` returns the code, FHIR and typed-model versions, prompt/report/fact schema
+  versions, IG packages, validator version, and environment.
 
 OpenAPI is available at `http://localhost:8000/docs`.
 
@@ -493,8 +499,9 @@ print(result["transcript"])
 ```
 
 Supported audio formats are wav, mp3, m4a/mp4, aac, flac, ogg/opus, aiff, and webm; other
-uploads return `415`. Audio above `MAX_UPLOAD_BYTES` returns `413`, and audio with no
-discernible speech returns `422`. `/v1/VOICE2FHIR` requires the `conversions:write` scope.
+uploads return `415`. Audio above `MAX_UPLOAD_BYTES` (25 MiB by default) returns `413`,
+and audio with no discernible speech returns `422`. `/v1/VOICE2FHIR` requires the
+`conversions:write` scope.
 
 ## API surface
 
@@ -523,7 +530,9 @@ discernible speech returns `422`. `/v1/VOICE2FHIR` requires the `conversions:wri
 | `POST` | `/v1/NAR2FHIR` | Grounded BYOK extraction, deterministic FHIR assembly (unvalidated) |
 | `POST` | `/v1/VOICE2FHIR` | Transcribe dictated audio, then convert as `/v1/NAR2FHIR` (unvalidated) |
 
-`/v1/NAR2FHIR` and `/v1/VOICE2FHIR` require the `conversions:write` scope.
+Validation endpoints require authentication but no specific scope. `/v1/NAR2FHIR` and
+`/v1/VOICE2FHIR` require `conversions:write`; a missing required scope returns `403
+forbidden`.
 
 ## Fail-closed behavior
 
@@ -532,13 +541,17 @@ The API does not silently downgrade verification:
 - unavailable validator or terminology dependencies return `503`;
 - an unknown profile returns `422 ig-not-loaded`;
 - blocked LLM egress returns `451`;
+- missing or rejected provider credentials return `400`;
+- credentials sent over disallowed plaintext transport return `400`;
+- unacknowledged external PHI egress returns `422`;
 - unqualified, over-budget, or malformed model output returns `422`;
 - provider rate limits return `429` and may include `Retry-After`; and
 - every report names skipped or not-applicable layers.
 
-Platform errors use an `error.code`, `error.message`, and `error.trace_id` JSON
-envelope. Clinical and dependency errors may use a FHIR `OperationOutcome`. Every
-response includes `X-Request-Id` and `X-Trace-Id`.
+Platform errors use a JSON `error` envelope with `code`, `message`, `trace_id`, and
+optional `details`. Clinical, dependency, and BYOK policy failures use a FHIR
+`OperationOutcome`; `issue.details.coding` carries a stable code listed by
+`GET /v1/error-codes`. Every response includes `X-Request-Id` and `X-Trace-Id`.
 
 ## Important configuration
 
@@ -548,10 +561,10 @@ See [`.env.example`](.env.example) for the complete development configuration.
 |---|---|---|
 | `DATABASE_URL` | Least-privileged PostgreSQL connection | Required |
 | `REDIS_URL` | Required configuration reserved for future M3 jobs | Required |
-| `VALIDATOR_URL` | Private validator sidecar | `http://localhost:8081` |
-| `TERMINOLOGY_URL` | FHIR terminology server | `https://tx.fhir.org/r4` |
+| `VALIDATOR_URL` | Private validator sidecar | Required; `.env.example` uses `http://localhost:8081` |
+| `TERMINOLOGY_URL` | FHIR terminology server | Required; `.env.example` uses `https://tx.fhir.org/r4` |
 | `DEFAULT_IG_PACKAGES` | IGs named in reports | `hl7.fhir.us.core#9.0.0` |
-| `VALIDATOR_VERSION` | Validator version named in reports | `6.10.2` |
+| `VALIDATOR_VERSION` | Validator version named in reports | Unset in code; Compose sets `6.10.2` |
 | `FHIRBRIDGE_ENV` | `development`, `staging`, or `production` | `development` |
 | `FHIRBRIDGE_EPHEMERAL_KEY` | Ephemeral encryption key required in production | Unset |
 | `REQUIRE_RLS_ENFORCEMENT` | Fail readiness if RLS is bypassed | `true` |
@@ -563,20 +576,26 @@ See [`.env.example`](.env.example) for the complete development configuration.
 | `REQUIRE_PHI_EGRESS_ACK` | Require explicit external PHI acknowledgement | `true` |
 | `MIN_QUALIFICATION_TIER` | Minimum model tier | `bronze` |
 | `MAX_COST_USD_PER_CONVERSION` | Worst-case model cost cap | `1.00` USD |
+| `MAX_UPLOAD_BYTES` | Maximum VOICE2FHIR audio size | `26214400` (25 MiB) |
+| `CREDENTIAL_STORAGE` | Provider credential persistence | `disabled` |
+| `DEBUG_CAPTURE_LLM_IO` | Capture prompts/completions in development | `false` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Enable OpenTelemetry export | Unset |
 
 The public `tx.fhir.org` service has no SLA. It receives codes rather than complete
 resources, but those codes may still be sensitive in context. Production deployments
 should use an appropriately licensed terminology service with suitable availability
 and privacy guarantees.
 
-Production mode additionally requires `FHIRBRIDGE_EPHEMERAL_KEY`, rejects the public
-`tx.fhir.org` default, forbids insecure transport and LLM I/O capture, and requires
-HTTPS for a non-loopback validator URL.
+Production mode additionally requires `FHIRBRIDGE_EPHEMERAL_KEY` containing exactly
+32 random bytes encoded with URL-safe base64, rejects the public `tx.fhir.org` default,
+forbids insecure transport and LLM I/O capture, and requires HTTPS for a non-loopback
+validator URL.
 
 ## Security and privacy
 
 - API keys are stored as Argon2id hashes.
-- Provider keys are wrapped as secrets and are not stored, logged, or returned.
+- Provider keys are held as in-memory secrets for the request lifetime and are not
+  stored, logged, or returned. Persistent credential storage is disabled in this build.
 - Validation resources and conversion narratives are processed and dropped.
 - Validation and conversion responses use `Cache-Control: no-store`.
 - Tenant tables use PostgreSQL row-level security.
@@ -599,27 +618,36 @@ uv run pytest -q -m "not integration"
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy
+uv run python scripts/check_docs.py
+uv run python scripts/check_notebooks.py
+uv run pip-audit
 ```
 
-Integration tests start PostgreSQL through testcontainers. Validator and terminology
-sidecar tests run only when their URLs are supplied:
+Integration tests require Docker and start PostgreSQL through testcontainers. Validator
+and terminology sidecar tests run only when `VALIDATOR_URL` and `TERMINOLOGY_URL` are
+supplied:
 
 ```bash
-uv run pytest -m integration
+uv run pytest -q -m integration
 ```
 
-The executable notebook smoke test is at
-[`notebooks/api_smoke_test.ipynb`](notebooks/api_smoke_test.ipynb):
+The quick text-to-FHIR notebook is at
+[`quick-test/text2fhir_quick_test.ipynb`](quick-test/text2fhir_quick_test.ipynb):
 
 ```bash
-uv sync --group notebook
-uv run jupyter lab notebooks/api_smoke_test.ipynb
+python -m pip install -r quick-test/requirements.txt
+python -m jupyter lab quick-test/text2fhir_quick_test.ipynb
 ```
 
-Set `FHIRBRIDGE_BASE`, `FHIRBRIDGE_API_KEY`, and `OPENROUTER_API_KEY` before running it.
-The notebook checks only the two primary workflows: validation and BYOK
-narrative-to-FHIR conversion (`/v1/NAR2FHIR`). Use synthetic resources because
-notebook outputs are persisted in the file.
+The notebook prompts without echo for the OpenRouter key and, unless
+`FHIRBRIDGE_API_KEY` is set, the FHIR API key. That FHIR key must include
+`conversions:write`. It starts the local Compose stack, calls `/v1/NAR2FHIR`, and
+submits the generated Bundle to `/v1/validate`. Use synthetic data only and clear
+outputs before committing.
+
+`requirements.txt`, `requirements-dev.txt`, and `requirements-notebook.txt` are
+committed exports of `uv.lock`. Regenerate them with the command in each file's header
+after changing dependencies.
 
 ## Repository layout
 
@@ -636,7 +664,7 @@ notebook outputs are persisted in the file.
 | `alembic/` | Database migrations |
 | `scripts/bootstrap.py` | App-role, tenant, and API-key provisioning |
 | `tests/` | Unit, contract, security, and integration suites |
-| `notebooks/` | Executable API smoke test and a step-by-step walkthrough of `/v1/NAR2FHIR` |
+| `quick-test/` | Self-contained notebook smoke test for `/v1/NAR2FHIR` and validation |
 
 ## Roadmap
 
@@ -644,8 +672,8 @@ notebook outputs are persisted in the file.
 |---|---|---|
 | M0 | Platform, auth, storage, health, containers | Implemented |
 | M1 | Validation cascade, terminology, plausibility | Implemented |
-| M2 | BYOK gateway, synchronous + agentic conversion, probe | Implemented |
-| M3 | Documents, facts, staged generation, fidelity, coverage, repair | Planned |
+| M2 | BYOK gateway, synchronous NAR2FHIR/VOICE2FHIR conversion, qualification gates | Implemented |
+| M3 | Documents, facts, staged generation, fidelity, coverage, normalize | Planned |
 | M4 | Human review workflow | Planned |
 | M5 | Goldset-based model qualification and calibrated routing | Planned |
 | M6 | Delivery integrations and operational hardening | Planned |
@@ -656,7 +684,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a change. Keep changes
 small and verification-first:
 
 1. add or update tests;
-2. run formatting, lint, types, and relevant test suites;
+2. run the commands in [CONTRIBUTING.md](CONTRIBUTING.md) and the CI quality checks;
 3. update OpenAPI snapshots when the public contract changes;
 4. never log resource bodies, issue messages, prompts, or credentials; and
 5. never turn an unavailable verifier into a successful response.
