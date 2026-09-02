@@ -49,10 +49,7 @@ The hosted playground supports:
 | FHIR `OperationOutcome` validation response | Implemented |
 | API-key authentication and tenant-aware PostgreSQL RLS | Implemented |
 | JSON logs, Prometheus metrics, and opt-in OpenTelemetry tracing | Implemented |
-| Persisted conversion jobs and source documents | Planned for M3 |
-| Source-span fidelity and coverage scoring | Planned for M3 |
-| Core API normalize endpoint (`POST /v1/normalize`) | Planned for M3 |
-| Human review and delivery workflows | Planned for M4–M6 |
+
 
 The current build targets:
 
@@ -527,8 +524,8 @@ and audio with no discernible speech returns `422`. `/v1/VOICE2FHIR` requires th
 | `GET` | `/v1/igs` | Preloaded implementation guides |
 | `POST` | `/v1/validate` | Structured validation report |
 | `POST` | `/v1/validate/outcome` | Validation as `OperationOutcome` |
-| `POST` | `/v1/NAR2FHIR` | Grounded BYOK extraction, deterministic FHIR assembly (unvalidated) |
-| `POST` | `/v1/VOICE2FHIR` | Transcribe dictated audio, then convert as `/v1/NAR2FHIR` (unvalidated) |
+| `POST` | `/v1/NAR2FHIR` | Grounded BYOK extraction, deterministic FHIR assembly  |
+| `POST` | `/v1/VOICE2FHIR` | Transcribe dictated audio, then convert as `/v1/NAR2FHIR`  |
 
 Validation endpoints require authentication but no specific scope. `/v1/NAR2FHIR` and
 `/v1/VOICE2FHIR` require `conversions:write`; a missing required scope returns `403
@@ -574,6 +571,9 @@ See [`.env.example`](.env.example) for the complete development configuration.
 | `LLM_ALLOWED_PROVIDERS` | Permitted provider ids | `*` |
 | `LOCAL_ONLY_MODE` | Restrict LLM calls to loopback hosts | `false` |
 | `REQUIRE_PHI_EGRESS_ACK` | Require explicit external PHI acknowledgement | `true` |
+| `DEID_MODE` | Narrative de-identification: `off`, `advisory`, or `enforced` | `off` |
+| `DEID_PROFILE` | HIPAA minimization profile | `hipaa_safe_harbor` |
+| `DEID_ALLOW_AUDIO_EGRESS` | Permit identifying audio egress while de-identification is enforced | `false` |
 | `MIN_QUALIFICATION_TIER` | Minimum model tier | `bronze` |
 | `MAX_COST_USD_PER_CONVERSION` | Worst-case model cost cap | `1.00` USD |
 | `MAX_UPLOAD_BYTES` | Maximum VOICE2FHIR audio size | `26214400` (25 MiB) |
@@ -596,6 +596,9 @@ validator URL.
 - API keys are stored as Argon2id hashes.
 - Provider keys are held as in-memory secrets for the request lifetime and are not
   stored, logged, or returned. Persistent credential storage is disabled in this build.
+- Optional enforced narrative de-identification replaces detected identifiers with
+  random request-local tokens before model egress and restores them locally before
+  assembly. See [the de-identification guide](docs/deidentification.md).
 - Validation resources and conversion narratives are processed and dropped.
 - Validation and conversion responses use `Cache-Control: no-store`.
 - Tenant tables use PostgreSQL row-level security.
@@ -607,6 +610,8 @@ validator URL.
 
 Operators remain responsible for TLS, access control, backups, retention, terminology
 licensing, provider agreements, incident response, and all infrastructure compliance.
+The de-identification report is evidence about processing, not a HIPAA compliance
+determination.
 
 ## Development
 

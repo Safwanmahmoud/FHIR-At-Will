@@ -46,7 +46,12 @@ from fhirbridge.observability.metrics import set_build_info
 from fhirbridge.observability.tracing import configure_tracing, instrument_app
 from fhirbridge.storage.session import create_engine, create_session_factory
 from fhirbridge.terminology.client import FhirTerminologyClient
-from fhirbridge.version import CODE_VERSION, PROMPT_SET_VERSION, TYPED_MODEL_FHIR_VERSION
+from fhirbridge.version import (
+    CODE_VERSION,
+    DEID_RULESET_VERSION,
+    PROMPT_SET_VERSION,
+    TYPED_MODEL_FHIR_VERSION,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +81,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     set_build_info(
         version=CODE_VERSION,
         prompt_set=PROMPT_SET_VERSION,
+        deid_ruleset=DEID_RULESET_VERSION,
         fhir=resolved.default_fhir_version,
         typed_models=TYPED_MODEL_FHIR_VERSION,
         environment=str(resolved.environment),

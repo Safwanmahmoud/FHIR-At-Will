@@ -89,6 +89,9 @@ async def capabilities(settings: SettingsDep, principal: PrincipalDep) -> Capabi
         local_only_mode=settings.local_only_mode,
         credential_storage=str(settings.credential_storage),
         min_qualification_tier=str(settings.min_qualification_tier),
+        deid_mode=str(settings.deid_mode),
+        deid_profile=str(settings.deid_profile),
+        deid_allow_audio_egress=settings.deid_allow_audio_egress,
     )
 
 

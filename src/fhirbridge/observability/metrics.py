@@ -116,6 +116,28 @@ TERMINOLOGY_CACHE: Final = Counter(
     registry=REGISTRY,
 )
 
+# --- PHI de-identification -------------------------------------------------
+DEID_RUNS: Final = Counter(
+    "fhirbridge_deid_runs_total",
+    "Narrative de-identification runs by configured mode and profile.",
+    labelnames=("mode", "profile"),
+    registry=REGISTRY,
+)
+
+DEID_DETECTIONS: Final = Counter(
+    "fhirbridge_deid_detections_total",
+    "Detected identifier spans by bounded identifier class.",
+    labelnames=("identifier_class",),
+    registry=REGISTRY,
+)
+
+DEID_REVERSALS: Final = Counter(
+    "fhirbridge_deid_reversals_total",
+    "De-identification reversal attempts by outcome.",
+    labelnames=("outcome",),
+    registry=REGISTRY,
+)
+
 # --- Pipeline (declared now, exercised from M3) ---------------------------
 SPAN_VERIFICATION_FAILURES: Final = Counter(
     "fhirbridge_span_verification_failures_total",
@@ -138,6 +160,9 @@ def render() -> bytes:
 __all__ = [
     "BUILD_INFO",
     "CONTENT_TYPE",
+    "DEID_DETECTIONS",
+    "DEID_REVERSALS",
+    "DEID_RUNS",
     "DEPENDENCY_DURATION",
     "DEPENDENCY_FAILURES",
     "DEPENDENCY_UP",

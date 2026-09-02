@@ -15,6 +15,8 @@ import pytest
 from fhirbridge.config import (
     ConfigurationError,
     CredentialStorage,
+    DeidMode,
+    DeidProfile,
     Environment,
     IgPackage,
     LlmMode,
@@ -105,6 +107,20 @@ class TestSettingsThatArriveThroughTheEnvironment:
         settings = from_env(monkeypatch, LLM_ALLOWED_PROVIDERS="ollama,openai")
 
         assert settings.llm_allowed_providers == ["ollama", "openai"]
+
+    def test_deidentification_policy_parses_from_environment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        settings = from_env(
+            monkeypatch,
+            DEID_MODE="enforced",
+            DEID_PROFILE="hipaa_limited_data_set",
+            DEID_ALLOW_AUDIO_EGRESS="true",
+        )
+
+        assert settings.deid_mode is DeidMode.ENFORCED
+        assert settings.deid_profile is DeidProfile.HIPAA_LIMITED_DATA_SET
+        assert settings.deid_allow_audio_egress is True
 
     def test_a_malformed_ig_package_from_the_environment_is_still_fatal(
         self, monkeypatch: pytest.MonkeyPatch

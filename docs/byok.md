@@ -40,6 +40,18 @@ is a policy gate, not consent, a data-processing agreement, or a compliance
 determination. Operators must independently establish whether a provider may
 receive the data.
 
+## Optional narrative de-identification
+
+Set `DEID_MODE=enforced` to replace detected identifiers before the extraction
+call and restore them locally before FHIR assembly. Callers should provide known
+patient identifiers in the request body's `known_identifiers` object to make
+matching deterministic. `advisory` mode reports detections but sends the original
+narrative and is not protective.
+
+See [Narrative de-identification](deidentification.md) for profiles, limitations,
+and the external-audio restriction. De-identification is not a substitute for a
+BAA or an operator HIPAA determination.
+
 ## Ephemeral keys and async jobs
 
 The current conversion endpoints are synchronous and do not persist caller

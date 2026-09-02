@@ -21,7 +21,8 @@ from __future__ import annotations
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, File, Response, UploadFile
+from fastapi import APIRouter, File, Form, Response, UploadFile
+from pydantic import ValidationError
 
 from fhirbridge.api.auth import Scope
 from fhirbridge.api.deps import (
@@ -31,9 +32,21 @@ from fhirbridge.api.deps import (
     SettingsDep,
     SttInvocationDep,
 )
-from fhirbridge.api.routers.convert import assembly_notes_of, llm_call_info_of
-from fhirbridge.api.schemas import DictationCallInfo, VoiceConvertResponse
+from fhirbridge.api.routers.convert import (
+    assembly_notes_of,
+    declared_identifiers_of,
+    deid_info_of,
+    llm_call_info_of,
+)
+from fhirbridge.api.schemas import (
+    ConvertRequest,
+    DictationCallInfo,
+    KnownIdentifiers,
+    VoiceConvertResponse,
+)
+from fhirbridge.deid.policy import DeidPolicy
 from fhirbridge.domain.errors import (
+    InvalidRequestError,
     PayloadTooLargeError,
     UnreadableDocumentError,
     UnsupportedMediaTypeError,
@@ -136,6 +149,15 @@ async def voice2fhir(
     settings: SettingsDep,
     response: Response,
     audio: Annotated[UploadFile, File(description="The dictated clinical audio to convert.")],
+    known_identifiers: Annotated[
+        str | None,
+        Form(
+            description=(
+                "Optional JSON object matching KnownIdentifiers. It is PHI and is processed "
+                "only in this request body."
+            )
+        ),
+    ] = None,
 ) -> VoiceConvertResponse:
     """Transcribe ``audio`` to text, then run the narrative-to-FHIR pipeline on it."""
     principal.require(Scope.CONVERSIONS_WRITE)
@@ -151,9 +173,24 @@ async def voice2fhir(
     if not raw:
         raise UnreadableDocumentError("The uploaded audio is empty.")
 
+    try:
+        declared = (
+            KnownIdentifiers.model_validate_json(known_identifiers)
+            if known_identifiers
+            else KnownIdentifiers()
+        )
+    except ValidationError as exc:
+        raise InvalidRequestError("known_identifiers must be a valid JSON object.") from exc
+
     dictation = await gateway.transcribe(stt, audio=raw, media_format=media_format)
+    conversion_body = ConvertRequest(text=dictation.text, known_identifiers=declared)
     result = await convert_narrative(
-        dictation.text, gateway=gateway, invocation=invocation, conversion_id=conversion_id
+        dictation.text,
+        gateway=gateway,
+        invocation=invocation,
+        conversion_id=conversion_id,
+        policy=DeidPolicy.from_settings(settings),
+        declared_identifiers=declared_identifiers_of(conversion_body),
     )
     assembled = result.assembled
 
@@ -184,6 +221,7 @@ async def voice2fhir(
         validated=False,
         assembly=assembly_notes_of(assembled),
         llm=llm_call_info_of(result.extraction, invocation),
+        deid=deid_info_of(result.deid),
         transcript=dictation.text,
         transcription=DictationCallInfo(
             provider=stt.provider,

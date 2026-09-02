@@ -30,13 +30,18 @@ from fhirbridge.api.deps import (
     LlmGatewayDep,
     LlmInvocationDep,
     PrincipalDep,
+    SettingsDep,
 )
 from fhirbridge.api.schemas import (
     AssemblyNote,
     ConvertRequest,
     ConvertResponse,
+    DeidInfo,
     LlmCallInfo,
 )
+from fhirbridge.deid.detectors import DeclaredIdentifier
+from fhirbridge.deid.policy import DeidPolicy
+from fhirbridge.deid.spans import IdentifierClass
 from fhirbridge.domain.ids import IdPrefix, new_id
 from fhirbridge.fhir.assemble import AssembledBundle, AssemblyAction
 from fhirbridge.llm.conversion import convert_narrative
@@ -59,6 +64,40 @@ _LLM_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     429: {"description": "The LLM provider rate-limited the request. Retryable."},
     451: {"description": "The target LLM host is blocked by egress policy."},
 }
+
+_DECLARED_FIELDS: dict[str, IdentifierClass] = {
+    "names": IdentifierClass.NAME,
+    "dates": IdentifierClass.DATE,
+    "medical_record_numbers": IdentifierClass.MRN,
+    "phones": IdentifierClass.PHONE,
+    "emails": IdentifierClass.EMAIL,
+    "addresses": IdentifierClass.ADDRESS,
+    "locations": IdentifierClass.LOCATION,
+    "account_numbers": IdentifierClass.ACCOUNT,
+    "license_numbers": IdentifierClass.LICENSE,
+    "device_identifiers": IdentifierClass.DEVICE,
+}
+
+
+def declared_identifiers_of(body: ConvertRequest) -> list[DeclaredIdentifier]:
+    return [
+        DeclaredIdentifier(identifier_class=identifier_class, value=value)
+        for field, identifier_class in _DECLARED_FIELDS.items()
+        for value in getattr(body.known_identifiers, field)
+        if value.strip()
+    ]
+
+
+def deid_info_of(report: Any) -> DeidInfo:
+    return DeidInfo(
+        mode=report.mode,
+        profile=report.profile,
+        ruleset_version=report.ruleset_version,
+        detections=report.detections,
+        replacements=report.replacements,
+        restored=report.restored,
+        residual_risk="not_assessed",
+    )
 
 
 def assembly_notes_of(assembled: AssembledBundle) -> list[AssemblyNote]:
@@ -101,6 +140,7 @@ async def nar2fhir(
     principal: PrincipalDep,
     invocation: LlmInvocationDep,
     gateway: LlmGatewayDep,
+    settings: SettingsDep,
     response: Response,
 ) -> ConvertResponse:
     """Extract grounded facts and assemble them into an unvalidated FHIR Bundle."""
@@ -108,7 +148,12 @@ async def nar2fhir(
     conversion_id = new_id(IdPrefix.CONVERSION)
 
     result = await convert_narrative(
-        body.text, gateway=gateway, invocation=invocation, conversion_id=conversion_id
+        body.text,
+        gateway=gateway,
+        invocation=invocation,
+        conversion_id=conversion_id,
+        policy=DeidPolicy.from_settings(settings),
+        declared_identifiers=declared_identifiers_of(body),
     )
     assembled = result.assembled
 
@@ -137,7 +182,14 @@ async def nar2fhir(
         validated=False,
         assembly=assembly_notes_of(assembled),
         llm=llm_call_info_of(result.extraction, invocation),
+        deid=deid_info_of(result.deid),
     )
 
 
-__all__ = ["assembly_notes_of", "llm_call_info_of", "router"]
+__all__ = [
+    "assembly_notes_of",
+    "declared_identifiers_of",
+    "deid_info_of",
+    "llm_call_info_of",
+    "router",
+]

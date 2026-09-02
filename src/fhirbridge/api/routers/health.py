@@ -31,6 +31,7 @@ from fhirbridge.observability import metrics
 from fhirbridge.storage.rls import check_rls
 from fhirbridge.version import (
     CODE_VERSION,
+    DEID_RULESET_VERSION,
     FACT_SCHEMA_VERSION,
     PROMPT_SET_VERSION,
     TYPED_MODEL_FHIR_VERSION,
@@ -211,6 +212,7 @@ async def version(services: Services) -> VersionResponse:
         fhir_version=settings.default_fhir_version,
         typed_model_fhir_version=TYPED_MODEL_FHIR_VERSION,
         prompt_set_version=PROMPT_SET_VERSION,
+        deid_ruleset_version=DEID_RULESET_VERSION,
         fact_schema_version=FACT_SCHEMA_VERSION,
         validation_report_schema_version=VALIDATION_REPORT_SCHEMA_VERSION,
         ig_packages=list(settings.ig_coordinates),

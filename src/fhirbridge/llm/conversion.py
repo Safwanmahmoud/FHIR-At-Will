@@ -9,8 +9,12 @@ and cannot drift, and the transcription step is a strict prefix rather than a fo
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
+from fhirbridge.deid.detectors import DeclaredIdentifier
+from fhirbridge.deid.minimize import DeidReport, minimize
+from fhirbridge.deid.policy import DeidPolicy
 from fhirbridge.fhir.assemble import AssembledBundle, assemble_bundle
 from fhirbridge.llm.gateway import LlmGateway, LlmResult
 from fhirbridge.llm.invocation import LlmInvocation
@@ -28,6 +32,7 @@ class ConversionResult:
 
     assembled: AssembledBundle
     extraction: LlmResult
+    deid: DeidReport
 
 
 async def convert_narrative(
@@ -36,6 +41,8 @@ async def convert_narrative(
     gateway: LlmGateway,
     invocation: LlmInvocation,
     conversion_id: str,
+    policy: DeidPolicy,
+    declared_identifiers: Sequence[DeclaredIdentifier] = (),
 ) -> ConversionResult:
     """Extract grounded facts from ``text`` and assemble them into a FHIR Bundle.
 
@@ -43,14 +50,21 @@ async def convert_narrative(
     same narrative yields the same content on every run while staying distinct
     across conversions.
     """
-    extraction = await gateway.complete_json(
-        invocation,
-        system_prompt=NARRATIVE_TO_ENTITIES.system,
-        user_prompt=NARRATIVE_TO_ENTITIES.render_user(narrative=text),
-    )
-    entities = parse_entities(extraction.resource)
-    assembled = assemble_bundle(entities, seed=conversion_id)
-    return ConversionResult(assembled=assembled, extraction=extraction)
+    minimization = minimize(text, policy=policy, declared=declared_identifiers)
+    try:
+        extraction = await gateway.complete_json(
+            invocation,
+            system_prompt=NARRATIVE_TO_ENTITIES.system,
+            user_prompt=NARRATIVE_TO_ENTITIES.render_user(narrative=minimization.safe_text),
+            minimization=minimization,
+        )
+        entities = parse_entities(extraction.resource)
+        restored = minimization.restore_entities(entities)
+        assembled = assemble_bundle(restored, seed=conversion_id)
+        report = minimization.report()
+        return ConversionResult(assembled=assembled, extraction=extraction, deid=report)
+    finally:
+        minimization.close()
 
 
 __all__ = ["ConversionResult", "convert_narrative"]

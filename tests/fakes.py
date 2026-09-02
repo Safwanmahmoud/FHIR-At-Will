@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
+from fhirbridge.deid.minimize import Minimization
 from fhirbridge.domain.errors import (
     DomainError,
     ErrorCode,
@@ -223,9 +224,10 @@ class FakeLlmGateway:
         *,
         system_prompt: str,
         user_prompt: str,
+        minimization: Minimization,
         max_tokens: int = 4096,
     ) -> LlmResult:
-        del invocation, max_tokens
+        del invocation, minimization, max_tokens
         self.complete_calls.append((system_prompt, user_prompt))
         if self.error is not None:
             raise self.error

@@ -190,6 +190,22 @@ ONE_INSTANCE_PER_REAL_WORLD_THING: Final[ExtractionRule] = ExtractionRule(
     ),
 )
 
+PRESERVE_REDACTION_TOKENS: Final[ExtractionRule] = ExtractionRule(
+    id="preserve-redaction-tokens",
+    title="Preserve de-identification tokens exactly",
+    guidance=(
+        "Text such as `[[NAME_0123ABCDEF45]]` or `[[DATE_0123ABCDEF45]]` is an opaque "
+        "de-identification token. Copy any such token exactly when it belongs in an "
+        "extracted value. Never alter, complete, interpret, invent, or perform arithmetic "
+        "on a token."
+    ),
+    elements=("Patient.name",),
+    rationale=(
+        "The service restores tokens locally after extraction. Any token mutation would "
+        "either lose a grounded value or leave an identifier surrogate in the Bundle."
+    ),
+)
+
 EXTRACTION_RULES: Final[tuple[ExtractionRule, ...]] = (
     AGE_IS_NOT_A_BIRTH_DATE,
     ONE_MEASUREMENT_PER_VALUE,
@@ -197,6 +213,7 @@ EXTRACTION_RULES: Final[tuple[ExtractionRule, ...]] = (
     NEGATED_AND_ATTRIBUTED_FINDINGS,
     SPLIT_MEDICATION_PHRASES,
     ONE_INSTANCE_PER_REAL_WORLD_THING,
+    PRESERVE_REDACTION_TOKENS,
 )
 """The ordered rule pack. Append to extend, and bump ``PROMPT_SET_VERSION``."""
 

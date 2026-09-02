@@ -49,6 +49,10 @@ class ErrorCode(StrEnum):
     BUDGET_EXCEEDED = "budget-exceeded"
     EGRESS_BLOCKED = "egress-blocked"
     PHI_EGRESS_NOT_ACKNOWLEDGED = "phi-egress-not-acknowledged"
+    PHI_MINIMIZATION_UNAVAILABLE = "phi-minimization-unavailable"
+    PHI_MINIMIZATION_REQUIRED = "phi-minimization-required"
+    PHI_MINIMIZATION_FAILED = "phi-minimization-failed"
+    AUDIO_EGRESS_NOT_PERMITTED = "audio-egress-not-permitted"
     INSECURE_TRANSPORT = "insecure-transport"
     CREDENTIAL_EXPIRED = "credential-expired"
 
@@ -182,6 +186,31 @@ ERROR_SPECS: Final[dict[ErrorCode, ErrorSpec]] = dict(
             422,
             "business-rule",
             "Sending PHI to an external provider requires explicit acknowledgement",
+        ),
+        _spec(
+            ErrorCode.PHI_MINIMIZATION_UNAVAILABLE,
+            503,
+            "transient",
+            "The required PHI minimization layer is unavailable",
+            retryable=True,
+        ),
+        _spec(
+            ErrorCode.PHI_MINIMIZATION_REQUIRED,
+            422,
+            "business-rule",
+            "PHI minimization is required before external model egress",
+        ),
+        _spec(
+            ErrorCode.PHI_MINIMIZATION_FAILED,
+            500,
+            "exception",
+            "PHI minimization failed closed",
+        ),
+        _spec(
+            ErrorCode.AUDIO_EGRESS_NOT_PERMITTED,
+            422,
+            "business-rule",
+            "Audio egress is not permitted while PHI minimization is enforced",
         ),
         _spec(
             ErrorCode.INSECURE_TRANSPORT,
@@ -537,6 +566,25 @@ class PhiEgressNotAcknowledgedError(DomainError):
     code = ErrorCode.PHI_EGRESS_NOT_ACKNOWLEDGED
 
 
+class PhiMinimizationUnavailableError(DependencyUnavailableError):
+    code = ErrorCode.PHI_MINIMIZATION_UNAVAILABLE
+
+
+class PhiMinimizationRequiredError(DomainError):
+    code = ErrorCode.PHI_MINIMIZATION_REQUIRED
+
+
+class PhiMinimizationFailedError(DomainError):
+    code = ErrorCode.PHI_MINIMIZATION_FAILED
+
+    def __init__(self) -> None:
+        super().__init__("PHI minimization failed closed.")
+
+
+class AudioEgressNotPermittedError(DomainError):
+    code = ErrorCode.AUDIO_EGRESS_NOT_PERMITTED
+
+
 class CredentialExpiredError(DomainError):
     code = ErrorCode.CREDENTIAL_EXPIRED
 
@@ -613,6 +661,7 @@ def error_code_system() -> dict[str, object]:
 __all__ = [
     "ERROR_CODE_SYSTEM",
     "ERROR_SPECS",
+    "AudioEgressNotPermittedError",
     "BudgetExceededError",
     "CredentialExpiredError",
     "DependencyUnavailableError",
@@ -640,6 +689,9 @@ __all__ = [
     "NotImplementedInV1Error",
     "PayloadTooLargeError",
     "PhiEgressNotAcknowledgedError",
+    "PhiMinimizationFailedError",
+    "PhiMinimizationRequiredError",
+    "PhiMinimizationUnavailableError",
     "PlatformError",
     "SafeContext",
     "TerminologyUnavailableError",

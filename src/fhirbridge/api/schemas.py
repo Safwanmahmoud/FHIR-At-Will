@@ -87,6 +87,30 @@ class ConvertRequest(BaseModel):
         min_length=1,
         description="The clinical narrative to convert into FHIR. Sent in the body as PHI.",
     )
+    known_identifiers: KnownIdentifiers = Field(
+        default_factory=lambda: KnownIdentifiers(),
+        description=(
+            "Identifiers the caller already knows, used for deterministic exact matching "
+            "before model egress. These values are PHI and belong only in this body."
+        ),
+    )
+
+
+class KnownIdentifiers(BaseModel):
+    """Caller-declared PHI used to make de-identification deterministic."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    names: list[str] = Field(default_factory=list)
+    dates: list[str] = Field(default_factory=list)
+    medical_record_numbers: list[str] = Field(default_factory=list)
+    phones: list[str] = Field(default_factory=list)
+    emails: list[str] = Field(default_factory=list)
+    addresses: list[str] = Field(default_factory=list)
+    locations: list[str] = Field(default_factory=list)
+    account_numbers: list[str] = Field(default_factory=list)
+    license_numbers: list[str] = Field(default_factory=list)
+    device_identifiers: list[str] = Field(default_factory=list)
 
 
 class LlmCallInfo(BaseModel):
@@ -128,6 +152,20 @@ class AssemblyNote(BaseModel):
     )
 
 
+class DeidInfo(BaseModel):
+    """PHI-free evidence about narrative minimization; never a compliance verdict."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: str
+    profile: str
+    ruleset_version: str
+    detections: dict[str, int] = Field(default_factory=dict)
+    replacements: int = 0
+    restored: int = 0
+    residual_risk: Literal["not_assessed"] = "not_assessed"
+
+
 class ConvertResponse(BaseModel):
     """Body of ``POST /v1/NAR2FHIR``."""
 
@@ -148,6 +186,7 @@ class ConvertResponse(BaseModel):
         ),
     )
     llm: LlmCallInfo
+    deid: DeidInfo
 
 
 class DictationCallInfo(BaseModel):
@@ -203,6 +242,7 @@ class VersionResponse(BaseModel):
         description="FHIR version of the typed models used for L1 structural validation."
     )
     prompt_set_version: str
+    deid_ruleset_version: str
     fact_schema_version: str
     validation_report_schema_version: str
     ig_packages: list[str]
@@ -265,6 +305,9 @@ class CapabilitiesResponse(BaseModel):
     local_only_mode: bool
     credential_storage: str
     min_qualification_tier: str
+    deid_mode: str
+    deid_profile: str
+    deid_allow_audio_egress: bool
 
 
 __all__ = [
@@ -272,9 +315,11 @@ __all__ = [
     "CapabilitiesResponse",
     "ConvertRequest",
     "ConvertResponse",
+    "DeidInfo",
     "DependencyHealthResponse",
     "DependencyStatus",
     "DictationCallInfo",
+    "KnownIdentifiers",
     "LiveResponse",
     "LlmCallInfo",
     "ReadyResponse",

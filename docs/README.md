@@ -3,6 +3,7 @@
 - [Deployment](deployment.md)
 - [Railway one-click template](railway-template.md)
 - [Bring-your-own-key and LLM egress](byok.md)
+- [Narrative de-identification](deidentification.md)
 - [Terminology setup and licensing](terminology-setup.md)
 - [Model compatibility](model-compatibility.md)
 - [API notes](api.md)

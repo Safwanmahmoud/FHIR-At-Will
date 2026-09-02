@@ -33,6 +33,7 @@ from pydantic import (
 )
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from fhirbridge.deid.policy import DeidMode, DeidProfile
 from fhirbridge.util.duration import DurationParseError, parse_duration
 
 logger = logging.getLogger(__name__)
@@ -271,6 +272,17 @@ class Settings(BaseSettings):
         default=False, validation_alias="ALLOW_INSECURE_TRANSPORT"
     )
 
+    # --- PHI de-identification -------------------------------------------
+    deid_mode: DeidMode = Field(default=DeidMode.OFF, validation_alias="DEID_MODE")
+    deid_profile: DeidProfile = Field(
+        default=DeidProfile.HIPAA_SAFE_HARBOR,
+        validation_alias="DEID_PROFILE",
+    )
+    deid_allow_audio_egress: bool = Field(
+        default=False,
+        validation_alias="DEID_ALLOW_AUDIO_EGRESS",
+    )
+
     # --- Pipeline / retention --------------------------------------------
     retention_default: timedelta = Field(
         default=timedelta(days=30), validation_alias="RETENTION_DEFAULT"
@@ -383,6 +395,17 @@ class Settings(BaseSettings):
     def _cross_field_rules(self) -> Self:
         problems: list[str] = []
 
+        if self.deid_mode is not DeidMode.OFF:
+            try:
+                from fhirbridge.deid.detectors import validate_assets
+
+                validate_assets()
+            except (OSError, ValueError) as exc:
+                problems.append(
+                    "DEID_MODE requires readable, valid de-identification assets "
+                    f"({type(exc).__name__})"
+                )
+
         if self.credential_storage is not CredentialStorage.DISABLED and self.master_key is None:
             problems.append(
                 f"FHIRBRIDGE_MASTER_KEY is required when CREDENTIAL_STORAGE="
@@ -487,6 +510,15 @@ class Settings(BaseSettings):
                 "REQUIRE_PHI_EGRESS_ACK=false: callers can send PHI to external providers "
                 "without recording an acknowledgement."
             )
+        if (
+            self.environment.is_production
+            and self.deid_mode is DeidMode.OFF
+            and self.llm_egress_allowlist
+        ):
+            warnings.append(
+                "DEID_MODE=off with external LLM egress enabled: raw clinical narratives "
+                "may leave this deployment. A BAA and operator controls remain required."
+            )
         if self.credential_storage is not CredentialStorage.DISABLED:
             warnings.append(
                 f"CREDENTIAL_STORAGE={self.credential_storage}: provider API keys will be "
@@ -553,6 +585,8 @@ def reset_settings_cache() -> None:
 __all__ = [
     "ConfigurationError",
     "CredentialStorage",
+    "DeidMode",
+    "DeidProfile",
     "Environment",
     "IgPackage",
     "LlmMode",

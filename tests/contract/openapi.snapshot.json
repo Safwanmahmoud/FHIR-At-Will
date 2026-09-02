@@ -60,6 +60,18 @@
             "description": "The dictated clinical audio to convert.",
             "title": "Audio",
             "type": "string"
+          },
+          "known_identifiers": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional JSON object matching KnownIdentifiers. It is PHI and is processed only in this request body.",
+            "title": "Known Identifiers"
           }
         },
         "required": [
@@ -74,6 +86,18 @@
         "properties": {
           "credential_storage": {
             "title": "Credential Storage",
+            "type": "string"
+          },
+          "deid_allow_audio_egress": {
+            "title": "Deid Allow Audio Egress",
+            "type": "boolean"
+          },
+          "deid_mode": {
+            "title": "Deid Mode",
+            "type": "string"
+          },
+          "deid_profile": {
+            "title": "Deid Profile",
             "type": "string"
           },
           "endpoints_implemented": {
@@ -145,7 +169,10 @@
           "llm_required",
           "local_only_mode",
           "credential_storage",
-          "min_qualification_tier"
+          "min_qualification_tier",
+          "deid_mode",
+          "deid_profile",
+          "deid_allow_audio_egress"
         ],
         "title": "CapabilitiesResponse",
         "type": "object"
@@ -154,6 +181,10 @@
         "additionalProperties": false,
         "description": "Body of ``POST /v1/NAR2FHIR``.\n\nThe clinical narrative is sent in the body, never a query parameter, because\nit is PHI (principle 2.6). The generated bundle is returned unvalidated.\n\nThere is deliberately no ``profiles`` field. Assembly is deterministic and\nvalidates nothing, so it cannot honor a profile request; stamping\n``meta.profile`` on that basis would be an unverified conformance claim. Pass\nprofiles to ``POST /v1/validate`` instead.",
         "properties": {
+          "known_identifiers": {
+            "$ref": "#/components/schemas/KnownIdentifiers",
+            "description": "Identifiers the caller already knows, used for deterministic exact matching before model egress. These values are PHI and belong only in this body."
+          },
           "text": {
             "description": "The clinical narrative to convert into FHIR. Sent in the body as PHI.",
             "minLength": 1,
@@ -190,6 +221,9 @@
             "title": "Conversion Id",
             "type": "string"
           },
+          "deid": {
+            "$ref": "#/components/schemas/DeidInfo"
+          },
           "llm": {
             "$ref": "#/components/schemas/LlmCallInfo"
           },
@@ -204,7 +238,8 @@
         "required": [
           "conversion_id",
           "bundle",
-          "llm"
+          "llm",
+          "deid"
         ],
         "title": "ConvertResponse",
         "type": "object"
@@ -249,6 +284,54 @@
           "reason"
         ],
         "title": "CriticalFlag",
+        "type": "object"
+      },
+      "DeidInfo": {
+        "additionalProperties": false,
+        "description": "PHI-free evidence about narrative minimization; never a compliance verdict.",
+        "properties": {
+          "detections": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Detections",
+            "type": "object"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "replacements": {
+            "default": 0,
+            "title": "Replacements",
+            "type": "integer"
+          },
+          "residual_risk": {
+            "const": "not_assessed",
+            "default": "not_assessed",
+            "title": "Residual Risk",
+            "type": "string"
+          },
+          "restored": {
+            "default": 0,
+            "title": "Restored",
+            "type": "integer"
+          },
+          "ruleset_version": {
+            "title": "Ruleset Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "profile",
+          "ruleset_version"
+        ],
+        "title": "DeidInfo",
         "type": "object"
       },
       "DependencyHealthResponse": {
@@ -406,6 +489,84 @@
         ],
         "title": "IssueSeverity",
         "type": "string"
+      },
+      "KnownIdentifiers": {
+        "additionalProperties": false,
+        "description": "Caller-declared PHI used to make de-identification deterministic.",
+        "properties": {
+          "account_numbers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Account Numbers",
+            "type": "array"
+          },
+          "addresses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Addresses",
+            "type": "array"
+          },
+          "dates": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dates",
+            "type": "array"
+          },
+          "device_identifiers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Device Identifiers",
+            "type": "array"
+          },
+          "emails": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Emails",
+            "type": "array"
+          },
+          "license_numbers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "License Numbers",
+            "type": "array"
+          },
+          "locations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Locations",
+            "type": "array"
+          },
+          "medical_record_numbers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Medical Record Numbers",
+            "type": "array"
+          },
+          "names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Names",
+            "type": "array"
+          },
+          "phones": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Phones",
+            "type": "array"
+          }
+        },
+        "title": "KnownIdentifiers",
+        "type": "object"
       },
       "LayerResult": {
         "additionalProperties": false,
@@ -1009,6 +1170,10 @@
         "additionalProperties": false,
         "description": "Body of ``GET /version`` \u2014 the pins required by principle 2.8.",
         "properties": {
+          "deid_ruleset_version": {
+            "title": "Deid Ruleset Version",
+            "type": "string"
+          },
           "environment": {
             "title": "Environment",
             "type": "string"
@@ -1068,6 +1233,7 @@
           "fhir_version",
           "typed_model_fhir_version",
           "prompt_set_version",
+          "deid_ruleset_version",
           "fact_schema_version",
           "validation_report_schema_version",
           "ig_packages",
@@ -1099,6 +1265,9 @@
             "title": "Conversion Id",
             "type": "string"
           },
+          "deid": {
+            "$ref": "#/components/schemas/DeidInfo"
+          },
           "llm": {
             "$ref": "#/components/schemas/LlmCallInfo"
           },
@@ -1122,6 +1291,7 @@
           "conversion_id",
           "bundle",
           "llm",
+          "deid",
           "transcript",
           "transcription"
         ],

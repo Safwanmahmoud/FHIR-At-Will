@@ -34,7 +34,10 @@ from decimal import Decimal
 from typing import Any, Final, Protocol
 
 from fhirbridge.config import QualificationTier, Settings
+from fhirbridge.deid.minimize import Minimization
+from fhirbridge.deid.policy import DeidMode
 from fhirbridge.domain.errors import (
+    AudioEgressNotPermittedError,
     BudgetExceededError,
     EgressBlockedError,
     FhirbridgeError,
@@ -46,6 +49,7 @@ from fhirbridge.domain.errors import (
     LlmSchemaViolationError,
     ModelNotQualifiedError,
     PhiEgressNotAcknowledgedError,
+    PhiMinimizationRequiredError,
     UnreadableDocumentError,
 )
 from fhirbridge.llm.invocation import LlmInvocation, SttInvocation
@@ -125,7 +129,13 @@ class LlmGateway:
 
     # --- Policy (pure, pre-network) ---------------------------------------
 
-    def authorize(self, invocation: LlmInvocation, *, sending_phi: bool) -> QualificationTier:
+    def authorize(
+        self,
+        invocation: LlmInvocation,
+        *,
+        sending_phi: bool,
+        minimization: Minimization | None = None,
+    ) -> QualificationTier:
         """Enforce every policy gate for a completion, returning the resolved tier.
 
         Raises the specific catalogue error for the first gate that fails.
@@ -136,6 +146,10 @@ class LlmGateway:
             sending_phi=sending_phi,
             phi_acknowledged=invocation.phi_egress_acknowledged,
         )
+        if self.settings.deid_mode is DeidMode.ENFORCED and (
+            minimization is None or not minimization.applied
+        ):
+            raise PhiMinimizationRequiredError()
 
         tier = resolve_tier(invocation.model)
         if not tier.satisfies(self.settings.min_qualification_tier):
@@ -203,14 +217,16 @@ class LlmGateway:
         *,
         system_prompt: str,
         user_prompt: str,
+        minimization: Minimization,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> LlmResult:
         """Authorize, call the provider, and parse a single JSON object back."""
-        self.authorize(invocation, sending_phi=True)
+        self.authorize(invocation, sending_phi=True, minimization=minimization)
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ]
+        minimization.assert_safe_payload(messages)
         self._enforce_budget(invocation, messages, max_tokens)
 
         response, latency_ms = await self._acompletion(
@@ -252,6 +268,12 @@ class LlmGateway:
             sending_phi=True,
             phi_acknowledged=invocation.phi_egress_acknowledged,
         )
+        if (
+            self.settings.deid_mode is DeidMode.ENFORCED
+            and invocation.egress_host not in _LOOPBACK
+            and not self.settings.deid_allow_audio_egress
+        ):
+            raise AudioEgressNotPermittedError()
         encoded = base64.b64encode(audio).decode("ascii")
         audio_block: dict[str, Any] = {
             "type": "input_audio",

@@ -15,8 +15,11 @@ from fhirbridge import __version__
 CODE_VERSION: Final[str] = __version__
 """Version of this service's code, stamped into every validation report."""
 
-PROMPT_SET_VERSION: Final[str] = "v5.2.0"
+PROMPT_SET_VERSION: Final[str] = "v5.3.0"
 """Version of the hash-pinned prompt template set, stamped into conversion reports."""
+
+DEID_RULESET_VERSION: Final[str] = "v1"
+"""Version of the deterministic PHI de-identification rules and data set."""
 
 FACT_SCHEMA_VERSION: Final[str] = "v1"
 """Version of the canonical `Fact` schema (AGENTS.md 9.2), unused until M3."""
@@ -38,6 +41,7 @@ See docs/adr/0004-r4-typed-models.md and OPEN_QUESTIONS.md#Q1.
 
 __all__ = [
     "CODE_VERSION",
+    "DEID_RULESET_VERSION",
     "FACT_SCHEMA_VERSION",
     "PROMPT_SET_VERSION",
     "SUPPORTED_FHIR_VERSIONS",
